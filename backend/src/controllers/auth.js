@@ -1,54 +1,65 @@
 // src/controllers/auth.js
 import User from '../models/User.js';
-import bcrypt from 'bcrypt';
+import AppError from '../utils/appError.js';
 import jwt from 'jsonwebtoken';
 import { validationResult } from 'express-validator';
 
-/**
- * @description Autentica um usuário e retorna um token JWT.
- * @route POST /api/auth/login
- * @access Public
- */
+// --- Função Auxiliar para gerar Token
+const signToken = (id, role) => {
+    return jwt.sign({ id, role }, process.env.JWT_SECRET, {
+        expiresIn: process.env.JWT_EXPIRES_IN || '1h',
+    });
+};
 
+// --- Controller de Login
 export const login = async (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
         return res.status(400).json({ errors: errors.array() });
     }
-
     const { email, password } = req.body;
+    try {
+        const user = await User.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } }).select('+password');
+        const passwordMatches = user ? await user.correctPassword(password, user.password) : false;
+        if (!user || !passwordMatches) {
+            return next(new AppError('Credenciais inválidas', 401));
+        }
+        const token = signToken(user._id, user.role);
+        res.status(200).json({ status: 'success', token });
+    } catch (err) {
+        next(err);
+    }
+};
+
+
+// --- Controller de Registro
+export const register = async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
 
     try {
-        const user = await User.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
+        const newUser = await User.create({
+            name: req.body.name,
+            email: req.body.email,
+            password: req.body.password,
+        });
 
-        const passwordMatches = user ? await bcrypt.compare(password, user.password) : false;
+        const token = signToken(newUser._id, newUser.role);
 
-        if (!user || !passwordMatches) {
-            const error = new Error('Credenciais inválidas');
-            error.statusCode = 401; 
-            error.status = 'fail'; 
-            error.isOperational = true; 
-            return next(error);
-        }
+        newUser.password = undefined;
 
-        const payload = {
-            id: user._id, 
-            role: user.role 
-        };
-
-        const token = jwt.sign(
-            payload,
-            process.env.JWT_SECRET,
-            { expiresIn: '100h' } 
-        );
-
-        res.status(200).json({
+        res.status(201).json({
             status: 'success',
-            token
+            token,
+            data: {
+                user: newUser, 
+            },
         });
 
     } catch (err) {
-        console.error("💥 ERRO Inesperado no Login:", err);
+        console.error("💥 ERRO em register:", err); 
         next(err);
     }
 };

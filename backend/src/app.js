@@ -1,6 +1,6 @@
 import express from 'express';
 import dotenv from 'dotenv';
-import connectDB from './config/db.js';
+import { connectDB } from './config/db.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import productRoutes from './routes/products.js';
@@ -45,3 +45,10 @@ app.use('/api-docs', swaggerUI.serve, swaggerUI.setup(swaggerJSDoc(options)));
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
+
+export default app;
+
+if (process.env.NODE_ENV !== 'test') {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
+}

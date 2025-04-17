@@ -1,5 +1,6 @@
 // src/controllers/category.js
 import Category from '../models/Category.js';
+import AppError from '../utils/appError.js';
 import Product from '../models/Product.js'; // Importar para verificar produtos antes de deletar
 import { validationResult } from 'express-validator';
 
@@ -17,9 +18,7 @@ export const createCategory = async (req, res, next) => {
         res.status(201).json(newCategory);
     } catch (err) {
         if (err.code === 11000) {
-             const error = new Error(`Categoria com nome '${name}' já existe.`);
-             error.statusCode = 409;
-             return next(error);
+             return next(new AppError(`Categoria com nome '${name}' já existe.`, 409));
         }
         next(err); 
     }
@@ -45,9 +44,7 @@ export const getCategoryById = async (req, res, next) => {
     try {
         const category = await Category.findById(req.params.id);
         if (!category) {
-            const error = new Error('Categoria não encontrada');
-            error.statusCode = 404;
-            return next(error);
+            return next(new AppError(`Categoria não encontrada!`, 404));
         }
         res.status(200).json(category);
     } catch (err) {
@@ -68,9 +65,7 @@ export const updateCategory = async (req, res, next) => {
     try {
         const category = await Category.findById(categoryId);
         if (!category) {
-             const error = new Error('Categoria não encontrada');
-             error.statusCode = 404;
-             return next(error);
+            return next(new AppError(`Categoria não encontrada!`, 404));
         }
 
         if (name) category.name = name;
@@ -81,9 +76,7 @@ export const updateCategory = async (req, res, next) => {
 
     } catch (err) {
          if (err.code === 11000) {
-             const error = new Error(`Já existe uma categoria com nome/slug similar.`);
-             error.statusCode = 409; 
-             return next(error);
+             return next(new AppError(`Já existe uma categoria com nome/slug similar.`, 409));
         }
         next(err);
     }
@@ -102,17 +95,13 @@ export const deleteCategory = async (req, res, next) => {
         
         const productCount = await Product.countDocuments({ category: categoryId });
         if (productCount > 0) {
-             const error = new Error(`Não é possível deletar. Existem ${productCount} produto(s) nesta categoria.`);
-             error.statusCode = 400;
-             return next(error);
+            return next(new AppError(`Não é possível deletar. Existem ${productCount} produto(s) nesta categoria.`, 400));
         }
 
         const category = await Category.findByIdAndDelete(categoryId);
 
         if (!category) {
-            const error = new Error('Categoria não encontrada');
-            error.statusCode = 404;
-            return next(error);
+            return next(new AppError(`Categoria não encontrada!`, 404));
         }
 
         res.status(200).json({ message: 'Categoria removida com sucesso' }); 

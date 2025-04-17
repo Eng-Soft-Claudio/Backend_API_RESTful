@@ -1,56 +1,93 @@
 // src/middleware/errorHandler.js
+import AppError from '../utils/appError.js';
 
-// Função para enviar a resposta de erro padronizada
-const sendErrorResponse = (err, res) => {
-    // Em ambiente de desenvolvimento, envie mais detalhes
-    if (process.env.NODE_ENV === 'development') {
-        console.error('💥 ERROR DETECTED:', err); // Log detalhado no console do dev
-        return res.status(err.statusCode || 500).json({
-            status: err.status || 'error',
-            message: err.message,
-            error: err, // Pode incluir o objeto de erro completo
-            stack: err.stack // E o stack trace
-        });
+// --- Funções Handler Específicas ---
+
+// Trata erro de Cast (ID mal formatado) do Mongoose
+const handleCastErrorDB = (err) => {
+    const message = `Recurso inválido. Valor '${err.value}' não é um ${err.kind} válido para o campo '${err.path}'.`;
+    return new AppError(message, 400);
+};
+
+// Trata erro de campo duplicado (unique: true) do MongoDB (código 11000)
+const handleDuplicateFieldsDB = (err) => {
+    let value = 'desconhecido';
+    if (err.keyValue) {
+        const key = Object.keys(err.keyValue)[0];
+        value = err.keyValue[key];
+    } else if (err.message) {
+        const match = err.message.match(/(["'])(?:(?=(\\?))\2.)*?\1/);
+        if (match) value = match[0];
     }
 
-    // Em produção, seja mais cuidadoso
-    console.error('💥 ERROR:', err.message); // Log básico em produção
+    const message = `Valor duplicado: '${value}'. Este campo já existe e deve ser único.`;
+    return new AppError(message, 409);
+};
 
-    // Se for um erro operacional conhecido (ex: validação, não encontrado), envie a mensagem
-    if (err.isOperational) {
-         return res.status(err.statusCode).json({
-            status: err.status,
-            message: err.message
-        });
-    }
+// Trata erros de validação do Schema Mongoose (required, min, max, enum, etc.)
+const handleValidationErrorDB = (err) => {
+    const errors = Object.values(err.errors).map(el => el.message);
+    const message = `Dados inválidos na entrada: ${errors.join('. ')}`;
+    return new AppError(message, 400);
+};
 
-    // Se for um erro desconhecido/inesperado (programação, pacote, etc.)
-    // Envie uma mensagem genérica para o cliente
-    return res.status(500).json({
-        status: 'error',
-        message: 'Algo deu muito errado no servidor!' // Mensagem genérica
+// Trata erro de assinatura inválida ou token malformado do JWT
+const handleJWTError = () =>
+    new AppError('Token inválido. Por favor, faça login novamente.', 401);
+
+// Trata erro de token JWT expirado
+const handleJWTExpiredError = () =>
+    new AppError('Sua sessão expirou. Por favor, faça login novamente.', 401); 
+
+// --- Funções de Envio de Resposta ---
+const sendErrorDev = (err, res) => {
+    console.error('💥 ERROR DEV:', err);
+    res.status(err.statusCode || 500).json({
+        status: err.status || 'error',
+        error: err,
+        message: err.message,
+        stack: err.stack,
     });
 };
 
+const sendErrorProd = (err, res) => {
+    console.error('💥 ERROR PROD:', err.message); 
 
-// O middleware de erro principal
-const globalErrorHandler = (err, req, res, next) => {
-    // Define um statusCode padrão se não existir
-    err.statusCode = err.statusCode || 500;
-    // Define um status padrão ('error' para 500, 'fail' para 4xx)
-    err.status = err.status || (String(err.statusCode).startsWith('4') ? 'fail' : 'error');
-
-    // Marcar erros que consideramos "operacionais" (não bugs graves)
-    // Aqui podemos adicionar mais verificações (ex: erros do Mongoose, Joi, etc.)
-    // Por enquanto, vamos assumir que erros com statusCode < 500 são operacionais
-    if (err.statusCode < 500) {
-      err.isOperational = true;
+    if (err.isOperational) {
+        res.status(err.statusCode).json({
+            status: err.status,
+            message: err.message,
+        });
     } else {
-      // Erros 500 podem ou não ser operacionais, default para não
-      err.isOperational = err.isOperational || false;
+        res.status(500).json({
+            status: 'error',
+            message: 'Desculpe, algo deu muito errado no servidor!',
+        });
+    }
+};
+
+// --- Middleware Principal ---
+const globalErrorHandler = (err, req, res, next) => {
+    err.statusCode = err.statusCode || 500;
+    err.status = err.status || 'error';
+
+    let error = { ...err, name: err.name, message: err.message, code: err.code, path: err.path, value: err.value, keyValue: err.keyValue, errors: err.errors };
+
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    if (isProduction) {
+        if (error.name === 'CastError') error = handleCastErrorDB(error);
+        if (error.code === 11000) error = handleDuplicateFieldsDB(error);
+        if (error.name === 'ValidationError') error = handleValidationErrorDB(error);
+        if (error.name === 'JsonWebTokenError') error = handleJWTError();
+        if (error.name === 'TokenExpiredError') error = handleJWTExpiredError();
     }
 
-    sendErrorResponse(err, res);
+    if (isProduction) {
+        sendErrorProd(error, res);
+    } else {
+        sendErrorDev(error.isOperational ? error : err, res);
+    }
 };
 
 export default globalErrorHandler;

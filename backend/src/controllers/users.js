@@ -1,110 +1,320 @@
+// src/controllers/users.js
 import User from '../models/User.js';
-import bcrypt from 'bcrypt';
+import { validationResult } from 'express-validator';
+import AppError from '../utils/appError.js';
 import jwt from 'jsonwebtoken';
-import { body, validationResult } from 'express-validator';
 
-// Registrar novo usuário (público)
-export const registerUser = [
-  // Validações
-  body('name').trim().notEmpty().withMessage('Nome é obrigatório'),
-  body('email').isEmail().normalizeEmail().withMessage('E-mail inválido'),
-  body('password')
-    .isLength({ min: 6 })
-    .withMessage('Senha deve ter pelo menos 6 caracteres'),
-  body('role')
-    .optional()
-    .isIn(['admin', 'user'])
-    .withMessage('Role inválido (valores permitidos: admin, user)'),
+// --- Função Auxiliar para filtrar campos permitidos para atualizações ---
+const filterObj = (obj, ...allowedFields) => {
+    const newObj = {};
+    Object.keys(obj).forEach(el => {
+        if (allowedFields.includes(el)) newObj[el] = obj[el];
+    });
+    return newObj;
+};
+
+// --- Função Auxiliar para gerar Token (Se ainda não estiver no topo) ---
+const signToken = (id, role) => {
+  return jwt.sign({ id, role }, process.env.JWT_SECRET, {
+      expiresIn: process.env.JWT_EXPIRES_IN || '1h',
+  });
+};
 
 
-async (req, res) => {
-  const errors = validationResult(req);
+// === AÇÕES DE ADMINISTRADOR ===
+
+/**
+ * @description Cria um novo usuário
+ * @route POST /api/users
+ * @access Admin
+ */
+export const createUser = async (req, res, next) => {
+    const errors = validationResult(req);
     if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+        const userData = {
+            name: req.body.name,
+            email: req.body.email,
+            password: req.body.password,
+            role: req.body.role && ['user', 'admin'].includes(req.body.role)
+                  ? req.body.role
+                  : 'user'
+        };
+
+        const newUser = await User.create(userData);
+        newUser.password = undefined;
+
+        res.status(201).json({
+            status: 'success',
+            data: {
+                user: newUser,
+            },
+        });
+
+    } catch (err) {
+        console.error("💥 ERRO em createUser (Admin):", err);
+        next(err); 
+    }
+};
+
+/**
+ * @description Lista todos os usuários
+ * @route GET /api/users
+ * @access Admin
+ */
+export const getUsers = async (req, res, next) => {
+    try {
+        const users = await User.find().select('-password'); 
+        res.status(200).json({
+            status: 'success',
+            results: users.length,
+            data: {
+                users,
+            },
+        });
+    } catch (err) {
+        console.error("💥 ERRO em getUsers (Admin):", err);
+        next(err); 
+    }
+};
+
+/**
+ * @description Obtém um usuário específico por ID
+ * @route GET /api/users/:id
+ * @access Admin
+ */
+export const getUserById = async (req, res, next) => {
+    const errors = validationResult(req);
+     if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+     }
+
+    try {
+        const user = await User.findById(req.params.id).select('-password');
+
+        if (!user) {
+            return next(new AppError('Nenhum usuário encontrado com este ID.', 404));
+        }
+
+        res.status(200).json({
+            status: 'success',
+            data: {
+                user,
+            },
+        });
+    } catch (err) {
+         console.error("💥 ERRO em getUserById (Admin):", err);
+        if (err.name === 'CastError') {
+             return next(new AppError(`ID inválido: ${req.params.id}`, 400));
+        }
+        next(err);
+    }
+};
+
+/**
+ * @description Atualiza um usuário
+ * @route PATCH /api/users/:id
+ * @access Admin
+ */
+export const updateUser = async (req, res, next) => {
+     const errors = validationResult(req);
+     if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+     }
+
+    try {
+        const filteredBody = filterObj(req.body, 'name', 'email', 'role', 'isActive'); // Ajuste os campos permitidos
+
+        const userToUpdate = await User.findById(req.params.id);
+        if (userToUpdate.role === 'admin' && filteredBody.role && filteredBody.role !== 'admin') {
+           return next(new AppError('Não é permitido rebaixar um administrador por esta rota.', 400));
+        }
+
+        const updatedUser = await User.findByIdAndUpdate(req.params.id, filteredBody, {
+            new: true, 
+            runValidators: true 
+        }).select('-password');
+
+        if (!updatedUser) {
+            return next(new AppError('Nenhum usuário encontrado com este ID.', 404));
+        }
+
+        res.status(200).json({
+            status: 'success',
+            data: {
+                user: updatedUser,
+            },
+        });
+    } catch (err) {
+        console.error("💥 ERRO em updateUser (Admin):", err);
+         if (err.code === 11000) {
+             return next(new AppError('Este email já está em uso.', 400));
+         }
+         if (err.name === 'CastError') {
+             return next(new AppError(`ID inválido: ${req.params.id}`, 400));
+         }
+        next(err); 
+    }
+};
+
+
+/**
+ * @description Deleta um usuário específico por ID.
+ * @route DELETE /api/users/:id
+ * @access Admin
+ */
+export const deleteUser = async (req, res, next) => {
+     const errors = validationResult(req);
+     if (!errors.isEmpty()) {
+         return res.status(400).json({ errors: errors.array() });
+     }
+
+    try {
+        const user = await User.findByIdAndDelete(req.params.id); 
+
+        if (!user) {
+            return next(new AppError('Nenhum usuário encontrado com este ID.', 404));
+        }
+
+        res.status(204).json({
+            status: 'success',
+            data: null,
+        });
+    } catch (err) {
+        console.error("💥 ERRO em deleteUser (Admin):", err);
+        if (err.name === 'CastError') {
+            return next(new AppError(`ID inválido: ${req.params.id}`, 400));
+        }
+        next(err); 
+    }
+};
+
+
+// === AÇÕES DO USUÁRIO LOGADO === 
+
+/**
+ * @description Obtém o perfil do usuário atualmente logado
+ * @route GET /api/users/me
+ * @access Usuário logado
+ */
+export const getMe = async (req, res, next) => {
+    try {
+        const user = await User.findById(req.user.id).select('-password');
+
+        if (!user) {
+             console.error("Erro: Usuário não encontrado em getMe, mas autenticado. ID:", req.user.id);
+             return next(new AppError('Usuário não encontrado.', 404));
+        }
+
+        res.status(200).json({
+            status: 'success',
+            data: {
+                user,
+            },
+        });
+    } catch (err) {
+         console.error("💥 ERRO em getMe:", err);
+        next(err); 
+    }
+};
+
+/**
+ * @description Atualiza dados do perfil do usuário logado
+ * @route PATCH /api/users/me
+ * @access Usuário logado
+ */
+export const updateMe = async (req, res, next) => {
+    const errors = validationResult(req);
+     if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+     }
+
+    try {
+        const filteredBody = filterObj(req.body, 'name', 'email'); 
+
+        const user = await User.findById(req.user.id);
+
+         if (!user) {
+             return next(new AppError('Usuário não encontrado.', 404));
+         }
+
+        user.name = filteredBody.name ?? user.name; 
+        user.email = filteredBody.email ?? user.email; 
+
+        const updatedUser = await user.save({ validateModifiedOnly: true });
+
+        updatedUser.password = undefined; 
+
+        res.status(200).json({
+            status: 'success',
+            data: {
+                user: updatedUser,
+            },
+        });
+    } catch (err) {
+         console.error("💥 ERRO em updateMe:", err);
+          if (err.code === 11000) {
+              return next(new AppError('Este email já está em uso.', 400));
+          }
+        next(err); 
+    }
+};
+
+
+/**
+ * @description Apaga e/ou inativa a conta do usuário logado
+ * @route DELETE /api/users/me
+ * @access Usuário logado
+ */
+export const deleteMe = async (req, res, next) => {
+    try {
+         const deletedUser = await User.findByIdAndDelete(req.user.id);
+         if (!deletedUser) {
+             return next(new AppError('Usuário não encontrado para deletar.', 404));
+         }
+
+        await User.findByIdAndUpdate(req.user.id, { isActive: false });
+
+        res.status(204).json({
+            status: 'success',
+            data: null,
+        });
+    } catch (err) {
+        console.error("💥 ERRO em deleteMe:", err);
+        next(err); 
+    }
+};
+
+
+/**
+ * @description Atualiza a senha do usuário atualmente logado.
+ * @route PATCH /api/users/updateMyPassword
+ * @access Usuário logado
+ */
+export const updateMyPassword = async (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const user = await User.findById(req.user.id).select('+password');
+    if (!(await user.correctPassword(req.body.currentPassword, user.password))) {
+      return next(new AppError('Sua senha atual está incorreta.', 401));
     }
-
-  try {
-    const { name, email, password, role } = req.body;
-
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ error: 'E-mail já registrado' });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-    
-    const user = await User.create({
-      name,
-      email,
-      password: hashedPassword,
-      role: role
-    });
-
-    res.status(201).json({
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-}];
-
-// Listar todos usuários (admin)
-export const getUsers = async (req, res) => {
-  try {
-    const users = await User.find().select('-password');
-    res.json(users);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// Obter perfil do usuário logado
-export const getUserProfile = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id).select('-password');
-    res.json(user);
-  } catch (err) {
-    res.status(404).json({ error: 'Usuário não encontrado' });
-  }
-};
-
-// Atualizar perfil (próprio usuário ou admin)
-export const updateUserProfile = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    
-    if (req.body.name) user.name = req.body.name;
-    if (req.body.email) user.email = req.body.email;
-    if (req.body.password) {
-      user.password = await bcrypt.hash(req.body.password, 10);
-    }
-
-    const updatedUser = await user.save();
-    res.json({
-      _id: updatedUser._id,
-      name: updatedUser.name,
-      email: updatedUser.email,
-      role: updatedUser.role
-    });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-};
-
-// Deletar usuário (admin)
-export const deleteUser = async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id);
-    if (!user) {
-      return res.status(404).json({ error: 'Usuário não encontrado' });
-    }
-
-    await user.remove();
-    res.json({ message: 'Usuário removido' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    user.password = req.body.password;
+    await user.save();
+    const token = signToken(user._id, user.role);
+    res.status(200).json({
+      status: 'success',
+      token, // Envia novo token para manter o usuário logado
+      message: 'Senha atualizada com sucesso!',
+  });
+} catch (err) {
+  console.error("💥 ERRO em updateMyPassword:", err);
+  next(err); // Passa para o handler global
+}
 };
