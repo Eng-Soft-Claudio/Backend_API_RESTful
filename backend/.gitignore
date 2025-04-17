@@ -109,8 +109,7 @@ dist
 
 # Gatsby files
 .cache/
-# Comment in the public line in if your project uses Gatsby and not Next.js
-# https://nextjs.org/blog/next-9-1#public-directory-support
+
 # public
 
 # vuepress build output
@@ -171,5 +170,3 @@ dist
 # Ignore all local history of files
 .history
 .ionide
-
-# End of https://www.toptal.com/developers/gitignore/api/node,linux,visualstudiocode

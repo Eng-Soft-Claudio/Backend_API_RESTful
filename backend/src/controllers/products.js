@@ -1,127 +1,197 @@
+// src/controllers/products.js
 import Product from '../models/Product.js';
-import { body, validationResult } from 'express-validator';
+import Category from '../models/Category.js';
+import { validationResult } from 'express-validator';
 import { uploadImage } from '../utils/cloudinary.js';
-import { upload } from '../middleware/upload.js';
 import { triggerWebhook } from './webhooks.js';
+import mongoose from 'mongoose'; 
 
-// Criar produto (admin)
-export const createProduct = [
-  upload.single('image'), // Middleware para upload de arquivo
-  body('name')
-    .trim()
-    .notEmpty()
-    .withMessage('Nome do produto é obrigatório'),
-  body('price')
-    .isFloat({ gt: 0 })
-    .withMessage('Preço deve ser maior que zero'),
-  body('category')
-    .isIn(['eletrônicos', 'vestuário', 'alimentos'])
-    .withMessage('Categoria inválida'),
+/**
+ * @description Cria um novo produto. Espera que Multer (upload.single) e as validações rodem ANTES na rota.
+ * @route POST /api/products
+ * @access Admin
+ */
 
-  async (req, res) => {
+export const createProduct = async (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      console.log("🚨 Erros de validação:", errors.array()); 
-      return res.status(400).json({ errors: errors.array() });
+        return res.status(400).json({ errors: errors.array() });
     }
 
     try {
-      if (!req.file) {
-        return res.status(400).json({ error: 'Nenhuma imagem enviada' });
-      }
-      console.log("📤 Arquivo recebido:", req.file);
-      console.log("⚙️ Corpo da requisição:", req.body); 
-      const result = await uploadImage(req.file.path);
-      console.log("☁️ Upload Cloudinary OK:", result);
 
-      // Cria o produto e armazena na variável
-      
-      const product = await Product.create({
-        name: req.body.name,
-        image: result.secure_url,
-        price: Number(req.body.price),
-        category: req.body.category
-      });
-      console.log("✅ Produto criado:", product);  
-    
-      // Dispara o webhook APÓS a criação do produto
-      await triggerWebhook('product_created', product);
-    
-      res.status(201).json(product); // ← Envie a resposta depois de tudo
-    
+        if (!req.file) {
+            console.error("Controller createProduct: req.file não definido após middlewares.");
+            return res.status(400).json({ error: 'Arquivo de imagem obrigatório não encontrado.' });
+        }
+
+        const result = await uploadImage(req.file.path);
+
+        const productData = {
+            name: req.body.name,
+            image: result.secure_url,
+            price: Number(req.body.price), 
+            category: req.body.category, 
+            description: req.body.description, 
+            stock: req.body.stock ? Number(req.body.stock) : 0 
+        };
+
+        const product = await Product.create(productData);
+
+        await triggerWebhook('product_created', product);
+
+        const populatedProduct = await Product.findById(product._id)
+            .populate('category', 'name slug') 
+            .lean();
+
+        res.status(201).json(populatedProduct); 
+
     } catch (err) {
-      console.error("💥 ERRO CRÍTICO:", err); 
-      res.status(400).json({ error: err.message });
-    }}];
-
-// Listar produtos (público) com paginação
-export const getProducts = async (req, res) => {
-  try {
-    const { page = 1, limit = 10, q, category, sort } = req.query;
-    const query = {};
-
-    // Filtro por categoria
-    if (category) query.category = category;
-
-    // Busca full-text
-    if (q) {
-      query.$text = { $search: q };
+        console.error("💥 ERRO em createProduct:", err);
+        next(err); 
     }
-
-    // Ordenação dinâmica 
-    const sortOptions = sort ? sort.split(',').join(' ') : '-createdAt';
-
-    const products = await Product.find(query)
-      .sort(sortOptions)
-      .limit(limit)
-      .skip((page - 1) * limit);
-
-    res.json(products);
-  } catch (err) {
-    res.status(500).json({ error: 'Erro na busca', details: err.message });
-  }
 };
 
-// Atualizar produto (admin)
-export const updateProduct = [
-  upload.single('image'),
-  async (req, res) => {
-    try {
-      const updates = { ...req.body };
-      
-      if (req.file) {
-        const result = await uploadImage(req.file.path);
-        updates.image = result.secure_url;
-      }
+/**
+ * @description Lista produtos com filtros, paginação e ordenação.
+ * @route GET /api/products
+ * @access Public (ou conforme definido na rota)
+ */
 
-      const product = await Product.findByIdAndUpdate(
-        req.params.id,
-        updates,
-        { new: true, runValidators: true }
-      );
-
-      await triggerWebhook('product_updated', product);
-
-      res.json(product);
-    } catch (err) {
-      res.status(400).json({ 
-        error: 'Erro ao atualizar produto',
-        details: err.message 
-      });
+export const getProducts = async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
     }
-  }
-];
 
+    try {
+        const { page = 1, limit = 10, q, category: categoryIdentifier, sort } = req.query;
+        const filterQuery = {}; 
 
-// Deletar produto (admin)
-export const deleteProduct = async (req, res) => {
-  try {
-    await Product.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Produto removido com sucesso' });
-  } catch (err) {
-    res.status(500).json({ 
-      error: 'Erro ao remover produto',
-      details: err.message 
-    });
-  }
+        if (categoryIdentifier) {
+            let foundCategory = await Category.findOne({
+                $or: [
+                    { _id: mongoose.Types.ObjectId.isValid(categoryIdentifier) ? categoryIdentifier : null },
+                    { slug: categoryIdentifier.toLowerCase() }
+                ]
+            }).select('_id').lean(); 
+
+            if (foundCategory) {
+                filterQuery.category = foundCategory._id;
+            } else {
+                console.log(`Categoria não encontrada para o identificador: ${categoryIdentifier}`);
+                return res.status(200).json({ products: [], message: "Categoria não encontrada" });
+            }
+        }
+
+        if (q) {
+            filterQuery.$text = { $search: q };
+        }
+
+        const sortOptions = sort ? String(sort).split(',').join(' ') : '-createdAt';
+
+        const products = await Product.find(filterQuery)
+            .populate('category', 'name slug') 
+            .sort(sortOptions)
+            .limit(limit) 
+            .skip((page - 1) * limit) 
+            .lean(); 
+
+        res.status(200).json({
+            status: 'success',
+            results: products.length, 
+            products,
+        });
+
+    } catch (err) {
+        console.error("💥 ERRO em getProducts:", err);
+        next(err);
+    }
+};
+
+/**
+ * @description Atualiza um produto existente. Espera que Multer e validações rodem ANTES na rota.
+ * @route PUT /api/products/:id
+ * @access Admin
+ */
+
+export const updateProduct = async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+        const updates = { ...req.body }; 
+        const productId = req.params.id; 
+
+        if (req.file) {
+            console.log("🔄 Atualizando imagem do produto...");
+            const result = await uploadImage(req.file.path);
+            updates.image = result.secure_url;
+        }
+
+        if (updates.price !== undefined) { 
+            updates.price = Number(updates.price);
+        }
+        if (updates.stock !== undefined) {
+            updates.stock = Number(updates.stock);
+        }
+
+        const product = await Product.findByIdAndUpdate(
+            productId,
+            updates,
+            { new: true, runValidators: true }
+        ).populate('category', 'name slug'); 
+
+        if (!product) {
+            const error = new Error('Produto não encontrado');
+            error.statusCode = 404;
+            error.status = 'fail';
+            error.isOperational = true;
+            return next(error); 
+        }
+
+        await triggerWebhook('product_updated', product);
+
+        res.status(200).json(product);
+
+    } catch (err) {
+        console.error("💥 ERRO em updateProduct:", err);
+        next(err);
+    }
+};
+
+/**
+ * @description Deleta um produto pelo ID.
+ * @route DELETE /api/products/:id
+ * @access Admin
+ */
+
+export const deleteProduct = async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+        const product = await Product.findByIdAndDelete(req.params.id);
+
+        if (!product) {
+            const error = new Error('Produto não encontrado');
+            error.statusCode = 404;
+            error.status = 'fail';
+            error.isOperational = true;
+            return next(error);
+        }
+
+        res.status(200).json({
+            status: 'success',
+            message: 'Produto removido com sucesso',
+        });
+
+    } catch (err) {
+        console.error("💥 ERRO em deleteProduct:", err);
+        next(err);
+    }
 };

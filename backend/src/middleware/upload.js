@@ -1,5 +1,6 @@
 // middleware/upload.js
 import multer from 'multer';
+import cloudinary from '../utils/cloudinary.js'; 
 
 // Configuração do armazenamento
 const storage = multer.diskStorage({
