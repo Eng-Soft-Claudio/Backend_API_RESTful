@@ -2,9 +2,10 @@
 import Product from '../models/Product.js';
 import Category from '../models/Category.js';
 import { validationResult } from 'express-validator';
-import { uploadImage } from '../utils/cloudinary.js';
+import { uploadImage, deleteImage } from '../utils/cloudinary.js';
 import { triggerWebhook } from './webhooks.js';
 import mongoose from 'mongoose'; 
+import AppError from '../utils/appError.js'; 
 
 /**
  * @description Cria um novo produto. Espera que Multer (upload.single) e as validações rodem ANTES na rota.
@@ -29,15 +30,16 @@ export const createProduct = async (req, res, next) => {
 
         const productData = {
             name: req.body.name,
-            image: result.secure_url,
             price: Number(req.body.price), 
             category: req.body.category, 
             description: req.body.description, 
-            stock: req.body.stock ? Number(req.body.stock) : 0 
+            stock: req.body.stock ? Number(req.body.stock) : 0,
+            image: result.secure_url,   
+            imagePublicId: result.public_id 
         };
 
         const product = await Product.create(productData);
-
+        
         await triggerWebhook('product_created', product);
 
         const populatedProduct = await Product.findById(product._id)
@@ -136,34 +138,46 @@ export const updateProduct = async (req, res, next) => {
 
     try {
         const updates = { ...req.body }; 
-        const productId = req.params.id; 
+        const productId = req.params.id;
+        let oldPublicId = null; 
+
+        const existingProduct = await Product.findById(productId).lean();
+        if (!existingProduct) {
+             return next(new AppError('Produto não encontrado para atualizar.', 404));
+        }
+        oldPublicId = existingProduct.imagePublicId; 
 
         if (req.file) {
-            const result = await uploadImage(req.file.path);
-            updates.image = result.secure_url;
-        }
+            if (oldPublicId) {
+                try {
+                    await deleteImage(oldPublicId);
+                } catch (cloudinaryErr) {
+                    console.error(`Falha ao deletar imagem antiga ${oldPublicId} do Cloudinary durante update:`, cloudinaryErr.message);
+                }
+            }
 
-        if (updates.price !== undefined) { 
+            const result = await uploadImage(req.file.path);
+            updates.image = result.secure_url;       
+            updates.imagePublicId = result.public_id; 
+        } else {
+             delete updates.imagePublicId;
+        }
+        if (updates.price !== undefined) {
             updates.price = Number(updates.price);
         }
         if (updates.stock !== undefined) {
             updates.stock = Number(updates.stock);
         }
-
+        
         const product = await Product.findByIdAndUpdate(
             productId,
-            updates,
+            updates, 
             { new: true, runValidators: true }
-        ).populate('category', 'name slug'); 
+        ).populate('category', 'name slug');
 
         if (!product) {
-            const error = new Error('Produto não encontrado');
-            error.statusCode = 404;
-            error.status = 'fail';
-            error.isOperational = true;
-            return next(error); 
+            return next(new AppError('Produto não encontrado após tentativa de update.', 404)); // Pouco provável
         }
-
         await triggerWebhook('product_updated', product);
 
         res.status(200).json(product);
@@ -186,22 +200,37 @@ export const deleteProduct = async (req, res, next) => {
     }
 
     try {
-        const product = await Product.findByIdAndDelete(req.params.id);
+        const productId = req.params.id;
+
+        const product = await Product.findById(productId).lean(); 
 
         if (!product) {
-            const error = new Error('Produto não encontrado');
-            error.statusCode = 404;
-            error.status = 'fail';
-            error.isOperational = true;
-            return next(error);
+            return next(new AppError('Produto não encontrado para deletar.', 404));
         }
 
-        res.status(200).json({
+        if (product.imagePublicId) {
+            try {
+                await deleteImage(product.imagePublicId);
+            } catch (cloudinaryErr) {
+                console.error(`Falha ao deletar imagem ${product.imagePublicId} do Cloudinary durante deleção do produto ${productId}:`, cloudinaryErr.message);
+            }
+        } else {
+             console.warn(`Produto ${productId} não possuía imagePublicId para deletar do Cloudinary.`);
+        }
+
+        const deletedProduct = await Product.findByIdAndDelete(productId);
+
+        if (!deletedProduct) {
+            return next(new AppError('Produto não encontrado ao tentar deletar do DB (após busca inicial).', 404));
+        }
+
+        res.status(200).json({ 
             status: 'success',
             message: 'Produto removido com sucesso',
         });
 
     } catch (err) {
+        
         next(err);
     }
 };

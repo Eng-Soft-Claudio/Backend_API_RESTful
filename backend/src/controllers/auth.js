@@ -1,15 +1,9 @@
 // src/controllers/auth.js
 import User from '../models/User.js';
 import AppError from '../utils/appError.js';
-import jwt from 'jsonwebtoken';
 import { validationResult } from 'express-validator';
+import { signToken } from '../utils/jwtUtils.js'; 
 
-// --- Função Auxiliar para gerar Token
-const signToken = (id, role) => {
-    return jwt.sign({ id, role }, process.env.JWT_SECRET, {
-        expiresIn: process.env.JWT_EXPIRES_IN || '8736h',
-    });
-};
 
 // --- Controller de Login
 export const login = async (req, res, next) => {

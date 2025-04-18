@@ -2,7 +2,7 @@
 import User from '../models/User.js';
 import { validationResult } from 'express-validator';
 import AppError from '../utils/appError.js';
-import jwt from 'jsonwebtoken';
+import { signToken } from '../utils/jwtUtils.js'; 
 
 // --- Função Auxiliar para filtrar campos permitidos para atualizações ---
 const filterObj = (obj, ...allowedFields) => {
@@ -13,12 +13,6 @@ const filterObj = (obj, ...allowedFields) => {
     return newObj;
 };
 
-// --- Função Auxiliar para gerar Token (Se ainda não estiver no topo) ---
-const signToken = (id, role) => {
-  return jwt.sign({ id, role }, process.env.JWT_SECRET, {
-      expiresIn: process.env.JWT_EXPIRES_IN || '1h',
-  });
-};
 
 
 // === AÇÕES DE ADMINISTRADOR ===
@@ -258,25 +252,25 @@ export const updateMe = async (req, res, next) => {
 
 
 /**
- * @description Apaga e/ou inativa a conta do usuário logado
+ * @description Apaga PERMANENTEMENTE a conta do usuário logado
  * @route DELETE /api/users/me
  * @access Usuário logado
  */
 export const deleteMe = async (req, res, next) => {
     try {
          const deletedUser = await User.findByIdAndDelete(req.user.id);
+
          if (!deletedUser) {
+             console.error("Erro em deleteMe: Usuário autenticado não encontrado para deleção. ID:", req.user.id);
              return next(new AppError('Usuário não encontrado para deletar.', 404));
          }
 
-        await User.findByIdAndUpdate(req.user.id, { isActive: false });
-
-        res.status(204).json({
+         res.status(204).json({
             status: 'success',
-            data: null,
+            data: null, 
         });
     } catch (err) {
-        next(err); 
+        next(err);
     }
 };
 
@@ -302,10 +296,10 @@ export const updateMyPassword = async (req, res, next) => {
     const token = signToken(user._id, user.role);
     res.status(200).json({
       status: 'success',
-      token, // Envia novo token para manter o usuário logado
+      token,
       message: 'Senha atualizada com sucesso!',
   });
 } catch (err) {
-  next(err); // Passa para o handler global
+  next(err); 
 }
 };
