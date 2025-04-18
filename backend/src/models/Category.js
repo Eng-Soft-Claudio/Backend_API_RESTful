@@ -21,7 +21,17 @@ const categorySchema = new mongoose.Schema({
 
 categorySchema.pre('save', function(next) {
     if (this.isModified('name')) {
-        this.slug = this.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+        const slugTemp = this.name.toLowerCase()
+            .replace(/[áàãâä]/g, 'a')
+            .replace(/[éèêë]/g, 'e')
+            .replace(/[íìîï]/g, 'i')
+            .replace(/[óòõôö]/g, 'o') 
+            .replace(/[úùûü]/g, 'u')
+            .replace(/[ç]/g, 'c')
+            .replace(/[^a-z0-9-]+/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/(^-|-$)+/g, '');
+        this.slug = slugTemp;
     }
     next();
 });

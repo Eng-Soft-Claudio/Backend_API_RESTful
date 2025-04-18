@@ -234,7 +234,9 @@ export const updateMe = async (req, res, next) => {
 
     try {
         const filteredBody = filterObj(req.body, 'name', 'email'); 
-
+        console.log('Dados recebidos:', req.body); // Log 1
+        console.log('Dados filtrados:', filteredBody);
+        
         const user = await User.findById(req.user.id);
 
          if (!user) {
@@ -243,9 +245,11 @@ export const updateMe = async (req, res, next) => {
 
         user.name = filteredBody.name ?? user.name; 
         user.email = filteredBody.email ?? user.email; 
+        console.log('Usuário antes do save:', user);
 
         const updatedUser = await user.save({ validateModifiedOnly: true });
-
+        console.log('Usuário depois do save:', updatedUser);
+        
         updatedUser.password = undefined; 
 
         res.status(200).json({

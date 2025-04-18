@@ -43,12 +43,4 @@ app.use('/api/categories', categoryRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api-docs', swaggerUI.serve, swaggerUI.setup(swaggerJSDoc(options)));
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
-
-export default app;
-
-if (process.env.NODE_ENV !== 'test') {
-  const PORT = process.env.PORT || 5000;
-  app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
-}
+export default app; 

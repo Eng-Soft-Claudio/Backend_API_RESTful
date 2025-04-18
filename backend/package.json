@@ -4,8 +4,8 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node src/app.js",
-    "dev": "nodemon src/app.js",
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules NODE_ENV=test jest --runInBand --detectOpenHandles --forceExit"
   },
   "keywords": [],
