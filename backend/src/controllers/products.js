@@ -47,7 +47,6 @@ export const createProduct = async (req, res, next) => {
         res.status(201).json(populatedProduct); 
 
     } catch (err) {
-        console.error("💥 ERRO em createProduct:", err);
         next(err); 
     }
 };
@@ -79,8 +78,15 @@ export const getProducts = async (req, res, next) => {
             if (foundCategory) {
                 filterQuery.category = foundCategory._id;
             } else {
-                console.log(`Categoria não encontrada para o identificador: ${categoryIdentifier}`);
-                return res.status(200).json({ products: [], message: "Categoria não encontrada" });
+                return res.status(200).json({
+                    status: 'success',
+                    results: 0,
+                    products: [],
+                    message: "Categoria não encontrada",
+                    totalPages: 0,
+                    currentPage: page,
+                    totalProducts: 0
+                });;
             }
         }
 
@@ -90,21 +96,28 @@ export const getProducts = async (req, res, next) => {
 
         const sortOptions = sort ? String(sort).split(',').join(' ') : '-createdAt';
 
-        const products = await Product.find(filterQuery)
-            .populate('category', 'name slug') 
-            .sort(sortOptions)
-            .limit(limit) 
-            .skip((page - 1) * limit) 
-            .lean(); 
+        const [products, totalProducts] = await Promise.all([
+            Product.find(filterQuery)              
+                   .populate('category', 'name slug')
+                   .sort(sortOptions)
+                   .limit(limit)
+                   .skip((page - 1) * limit)
+                   .lean(),
+            Product.countDocuments(filterQuery)     
+        ]);
+
+        const totalPages = Math.ceil(totalProducts / limit);
 
         res.status(200).json({
             status: 'success',
             results: products.length, 
-            products,
+            totalProducts: totalProducts, 
+            totalPages: totalPages,       
+            currentPage: page,          
+            products,                  
         });
 
     } catch (err) {
-        console.error("💥 ERRO em getProducts:", err);
         next(err);
     }
 };
@@ -126,7 +139,6 @@ export const updateProduct = async (req, res, next) => {
         const productId = req.params.id; 
 
         if (req.file) {
-            console.log("🔄 Atualizando imagem do produto...");
             const result = await uploadImage(req.file.path);
             updates.image = result.secure_url;
         }
@@ -157,7 +169,6 @@ export const updateProduct = async (req, res, next) => {
         res.status(200).json(product);
 
     } catch (err) {
-        console.error("💥 ERRO em updateProduct:", err);
         next(err);
     }
 };
@@ -191,7 +202,6 @@ export const deleteProduct = async (req, res, next) => {
         });
 
     } catch (err) {
-        console.error("💥 ERRO em deleteProduct:", err);
         next(err);
     }
 };

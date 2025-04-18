@@ -38,17 +38,6 @@ beforeEach(async () => {
     userId = normalUser._id;
 });
 
-// // --- Função Auxiliar para criar usuário e obter token (para evitar repetição) ---
-// const createTestUserAndLogin = async (userData) => {
-//     const user = await User.create(userData);
-//     const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, {
-//         expiresIn: process.env.JWT_EXPIRES_IN || '1h',
-//     });
-//     return { user, token };
-// };
-
-// afterEach(async () => {
-// });
 
 afterAll(async () => {
     await User.deleteMany({}); 
@@ -296,8 +285,8 @@ describe('/api/users', () => {
                  .expect(200);
 
             expect(res.body.data.user.role).toBe('user');
-             const dbUser = await User.findById(userId);
-             expect(dbUser.passwordChangedAt).toBeUndefined(); 
+            const dbUser = await User.findById(userId);
+            expect(dbUser.passwordChangedAt).toBeUndefined(); 
         });
     });
 

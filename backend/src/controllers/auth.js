@@ -7,7 +7,7 @@ import { validationResult } from 'express-validator';
 // --- Função Auxiliar para gerar Token
 const signToken = (id, role) => {
     return jwt.sign({ id, role }, process.env.JWT_SECRET, {
-        expiresIn: process.env.JWT_EXPIRES_IN || '1h',
+        expiresIn: process.env.JWT_EXPIRES_IN || '8736h',
     });
 };
 

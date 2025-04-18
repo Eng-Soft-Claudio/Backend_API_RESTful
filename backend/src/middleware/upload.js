@@ -1,6 +1,6 @@
 // middleware/upload.js
 import multer from 'multer';
-import cloudinary from '../utils/cloudinary.js'; 
+
 
 // Configuração do armazenamento
 const storage = multer.diskStorage({
@@ -23,5 +23,5 @@ const fileFilter = (req, file, cb) => {
 export const upload = multer({ 
   storage,
   fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB
+  limits: { fileSize: 5 * 1024 * 1024 } 
 });

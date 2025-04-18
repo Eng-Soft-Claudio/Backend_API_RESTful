@@ -55,7 +55,6 @@ export const createUser = async (req, res, next) => {
         });
 
     } catch (err) {
-        console.error("💥 ERRO em createUser (Admin):", err);
         next(err); 
     }
 };
@@ -76,7 +75,6 @@ export const getUsers = async (req, res, next) => {
             },
         });
     } catch (err) {
-        console.error("💥 ERRO em getUsers (Admin):", err);
         next(err); 
     }
 };
@@ -106,7 +104,6 @@ export const getUserById = async (req, res, next) => {
             },
         });
     } catch (err) {
-         console.error("💥 ERRO em getUserById (Admin):", err);
         if (err.name === 'CastError') {
              return next(new AppError(`ID inválido: ${req.params.id}`, 400));
         }
@@ -149,7 +146,6 @@ export const updateUser = async (req, res, next) => {
             },
         });
     } catch (err) {
-        console.error("💥 ERRO em updateUser (Admin):", err);
          if (err.code === 11000) {
              return next(new AppError('Este email já está em uso.', 400));
          }
@@ -184,7 +180,6 @@ export const deleteUser = async (req, res, next) => {
             data: null,
         });
     } catch (err) {
-        console.error("💥 ERRO em deleteUser (Admin):", err);
         if (err.name === 'CastError') {
             return next(new AppError(`ID inválido: ${req.params.id}`, 400));
         }
@@ -216,7 +211,6 @@ export const getMe = async (req, res, next) => {
             },
         });
     } catch (err) {
-         console.error("💥 ERRO em getMe:", err);
         next(err); 
     }
 };
@@ -234,8 +228,6 @@ export const updateMe = async (req, res, next) => {
 
     try {
         const filteredBody = filterObj(req.body, 'name', 'email'); 
-        console.log('Dados recebidos:', req.body); // Log 1
-        console.log('Dados filtrados:', filteredBody);
         
         const user = await User.findById(req.user.id);
 
@@ -245,11 +237,9 @@ export const updateMe = async (req, res, next) => {
 
         user.name = filteredBody.name ?? user.name; 
         user.email = filteredBody.email ?? user.email; 
-        console.log('Usuário antes do save:', user);
 
         const updatedUser = await user.save({ validateModifiedOnly: true });
-        console.log('Usuário depois do save:', updatedUser);
-        
+
         updatedUser.password = undefined; 
 
         res.status(200).json({
@@ -259,7 +249,6 @@ export const updateMe = async (req, res, next) => {
             },
         });
     } catch (err) {
-         console.error("💥 ERRO em updateMe:", err);
           if (err.code === 11000) {
               return next(new AppError('Este email já está em uso.', 400));
           }
@@ -287,7 +276,6 @@ export const deleteMe = async (req, res, next) => {
             data: null,
         });
     } catch (err) {
-        console.error("💥 ERRO em deleteMe:", err);
         next(err); 
     }
 };
@@ -318,7 +306,6 @@ export const updateMyPassword = async (req, res, next) => {
       message: 'Senha atualizada com sucesso!',
   });
 } catch (err) {
-  console.error("💥 ERRO em updateMyPassword:", err);
   next(err); // Passa para o handler global
 }
 };
