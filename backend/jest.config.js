@@ -1,4 +1,4 @@
-// backend/jest.config.js
+// jest.config.js
 export default {
     testEnvironment: 'node',
     preset: '@shelf/jest-mongodb',
@@ -6,5 +6,7 @@ export default {
     testPathIgnorePatterns: ['/node_modules/'],
     collectCoverage: true,
     coverageDirectory: "coverage",
-    transform: {}
-};
+    transform: {
+      '^.+\\.js$': 'babel-jest', 
+    },
+  };

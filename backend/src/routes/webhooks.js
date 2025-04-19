@@ -1,7 +1,7 @@
 // src/routes/webhooks.js
 import express from 'express';
-import { createWebhook } from '../controllers/webhooks.js';
 import { body } from 'express-validator';
+import { registerWebhook, handleWebhook } from '../controllers/webhooks.js';
 import { authenticate, isAdmin } from '../middleware/auth.js'; 
 
 const router = express.Router();

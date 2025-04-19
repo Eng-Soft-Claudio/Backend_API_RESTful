@@ -1,39 +1,40 @@
 // src/tests/products.test.js
+// ===== IMPORTS PADRÃO PRIMEIRO =====
 import request from 'supertest';
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import jwt from 'jsonwebtoken';
-import path from 'path'; 
+import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 import app from '../app.js';
-import Product from '../models/Product.js'; 
+import Product from '../models/Product.js';
 import Category from '../models/Category.js';
 import User from '../models/User.js';
 
+// ===== Mocking Simples (Recomendado com Babel) =====
+// 1. Mock o módulo. Jest substituirá exports por jest.fn() automaticamente.
+jest.mock('../utils/cloudinary.js');
 
-// --- Mocking Cloudinary ---
-const mockUploadImage = jest.fn();
-const mockDeleteImage = jest.fn();
-jest.mock('../utils/cloudinary.js', () => ({
-    __esModule: true, 
-    uploadImage: mockUploadImage,
-    deleteImage: mockDeleteImage,
-    default: jest.fn(), 
-}));
+// 2. Importe as funções MOCKADAS.
+import { uploadImage, deleteImage } from '../utils/cloudinary.js';
+// ===================================================
 
-
+// Variáveis globais
 let mongoServer;
 let categoryId;
 let adminToken; 
 let userToken;
-let adminId;
 
-// Criação de diretório e arquivo dummy para upload
+
+// --- Obter Caminho & Arquivo Dummy ---
 const uploadsDir = path.join(__dirname, 'test-uploads');
 const dummyImagePath = path.join(uploadsDir, 'dummy.jpg');
 
 
+// --- Setup e Teardown ---
 beforeAll(async () => {
+
     if (!fs.existsSync(uploadsDir)) {
         fs.mkdirSync(uploadsDir);
     }
@@ -43,43 +44,33 @@ beforeAll(async () => {
     mongoServer = await MongoMemoryServer.create();
     const mongoUri = mongoServer.getUri();
     await mongoose.connect(mongoUri);
-
     await User.deleteMany({});
     await Product.deleteMany({});
     await Category.deleteMany({});
 
     const testCategory = await Category.create({ name: 'Categoria Teste 1' });
     categoryId = testCategory._id;
-
     const adminData = { name: 'Admin ProdTest', email: 'admin.prod@test.com', password: 'password123', role: 'admin' };
     const userData = { name: 'User ProdTest', email: 'user.prod@test.com', password: 'password123', role: 'user' };
     const adminUser = await User.create(adminData);
     const normalUser = await User.create(userData);
-    adminId = adminUser._id;
-
     adminToken = jwt.sign({ id: adminUser._id, role: adminUser.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
     userToken = jwt.sign({ id: normalUser._id, role: normalUser.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
-
-    mockUploadImage.mockResolvedValue({
-        secure_url: 'http://fake.cloudinary.com/image.jpg',
-        public_id: 'fake_public_id'
-    });
-    mockDeleteImage.mockResolvedValue({ result: 'ok' }); 
 });
 
 beforeEach(async () => {
-    mockUploadImage.mockClear();
-    mockDeleteImage.mockClear();
-    mockUploadImage.mockResolvedValue({
+    uploadImage.mockClear();
+    deleteImage.mockClear();
+    uploadImage.mockResolvedValue({
         secure_url: 'http://fake.cloudinary.com/image.jpg',
         public_id: 'fake_public_id'
     });
-    mockDeleteImage.mockResolvedValue({ result: 'ok' });
+    deleteImage.mockResolvedValue({ result: 'ok' });
 });
 
 afterEach(async () => {
     await Product.deleteMany({});
-});
+}); 
 
 afterAll(async () => {
     await User.deleteMany({});
@@ -138,6 +129,10 @@ describe('/api/products', () => {
              await Product.create({ name: 'Produto Teste 3', price: 300, category: otherCategory._id, image: 'teste3.jpg' });
              await Product.create({ name: 'Produto Teste 4', price: 400, category: categoryId, image: 'test4.jpg' });
 
+             const productsInDb = await Product.find({});
+             console.log('PRODUTOS NO DB ANTES DO FILTRO:', productsInDb.map(p => ({ name: p.name, category: p.category })));
+             console.log('FILTRANDO PELA CATEGORIA ID:', categoryId);
+
              const res = await request(app)
                  .get(`/api/products?category=${categoryId}`)
                  .expect(200);
@@ -154,11 +149,11 @@ describe('/api/products', () => {
                  .get(`/api/products?category=${nonExistentId}`)
                  .expect(200); 
 
-                 expect(res.body).not.toHaveProperty('status'); 
-                 expect(res.body).not.toHaveProperty('results'); 
-                 expect(Array.isArray(res.body.products)).toBe(true); 
-                 expect(res.body.products).toHaveLength(0); 
-                 expect(res.body.message).toBe('Categoria não encontrada'); 
+                expect(res.body).toHaveProperty('status', 'success');
+                expect(res.body).toHaveProperty('results', 0);
+                expect(Array.isArray(res.body.products)).toBe(true);
+                expect(res.body.products).toHaveLength(0);
+                expect(res.body).toHaveProperty('message', 'Categoria não encontrada'); 
         });
 
          it('deve suportar paginação (limit)', async () => {
@@ -182,15 +177,16 @@ describe('/api/products', () => {
 
 // --- Testes POST / ---
 describe('POST /', () => {
-    const productData = {
-        name: 'Produto Teste POST',
-        price: '99.99', 
-        category: categoryId.toString(), 
-        description: 'Descrição Teste',
-        stock: '10', 
-    };
 
     it('Admin deve criar um produto com sucesso', async () => {
+        const productData = {
+            name: 'Produto Teste POST',
+            price: '99.99',
+            category: categoryId.toString(),
+            description: 'Descrição Teste',
+            stock: '10',
+        };
+
         const res = await request(app)
             .post('/api/products')
             .set('Authorization', `Bearer ${adminToken}`)
@@ -211,7 +207,7 @@ describe('POST /', () => {
         expect(res.body.image).toBe('http://fake.cloudinary.com/image.jpg'); 
         expect(res.body.imagePublicId).toBe('fake_public_id'); 
 
-        expect(mockUploadImage).toHaveBeenCalledTimes(1);
+        expect(uploadImage).toHaveBeenCalledTimes(1);
 
         const dbProduct = await Product.findById(res.body._id);
         expect(dbProduct).not.toBeNull();
@@ -223,55 +219,55 @@ describe('POST /', () => {
         await request(app)
             .post('/api/products')
             .set('Authorization', `Bearer ${adminToken}`)
-            .field('name', productData.name)
-            .field('price', productData.price)
-            .field('category', productData.category)
+            .field('name', 'Teste Sem Imagem')
+            .field('price', '10.00')
+            .field('category', categoryId.toString())
             .expect(400);
-        expect(mockUploadImage).not.toHaveBeenCalled();
+            expect(uploadImage).not.toHaveBeenCalled();
     });
 
     it('Deve retornar 400 se o nome estiver faltando', async () => {
-         await request(app)
-            .post('/api/products')
-            .set('Authorization', `Bearer ${adminToken}`)
-            .field('price', productData.price)
-            .field('category', productData.category)
-            .attach('image', dummyImagePath)
-            .expect(400);
-         expect(mockUploadImage).not.toHaveBeenCalled(); 
-    });
+        await request(app)
+        .post('/api/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .field('price', '20.00')
+        .field('category', categoryId.toString())
+        .attach('image', dummyImagePath)
+        .expect(400);
+        expect(uploadImage).not.toHaveBeenCalled();
+});
 
     it('Deve retornar 400 se a categoria for inválida', async () => {
-         await request(app)
-            .post('/api/products')
-            .set('Authorization', `Bearer ${adminToken}`)
-            .field('name', productData.name)
-            .field('price', productData.price)
-            .field('category', 'invalid-id')
-            .attach('image', dummyImagePath)
-            .expect(400);
-    });
+        await request(app)
+        .post('/api/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .field('name', 'Teste Categoria Inválida')
+        .field('price', '30.00')
+        .field('category', 'invalid-id')
+        .attach('image', dummyImagePath)
+        .expect(400);
+});
 
     it('Usuário normal NÃO deve conseguir criar produto (403)', async () => {
         await request(app)
             .post('/api/products')
-            .set('Authorization', `Bearer ${userToken}`) 
-            .field('name', productData.name)
-            .field('price', productData.price)
-            .field('category', productData.category)
+            .set('Authorization', `Bearer ${userToken}`)
+            .field('name', 'Tentativa User')
+            .field('price', '40.00')
+            .field('category', categoryId.toString())
             .attach('image', dummyImagePath)
             .expect(403);
     });
 
      it('Deve retornar 401 se não houver token', async () => {
-         await request(app)
-            .post('/api/products')
-            .field('name', productData.name)
-            .field('price', productData.price)
-            .field('category', productData.category)
-            .attach('image', dummyImagePath)
-            .expect(401);
-     });
+        await request(app)
+        .post('/api/products')
+        .field('name', 'Tentativa Sem Token')
+        .field('price', '50.00')
+        .field('category', categoryId.toString())
+        .attach('image', dummyImagePath)
+        .expect(401);
+ });
 });
 
 // --- Testes PUT /:id ---
@@ -297,7 +293,7 @@ describe('PUT /:id', () => {
             price: '120.50',
             stock: '5'
         };
-        mockUploadImage.mockResolvedValueOnce({
+        uploadImage.mockResolvedValueOnce({
             secure_url: 'http://new.cloudinary.com/new_image.jpg',
             public_id: 'new_public_id'
         });
@@ -318,9 +314,9 @@ describe('PUT /:id', () => {
         expect(res.body.image).toBe('http://new.cloudinary.com/new_image.jpg');
         expect(res.body.imagePublicId).toBe('new_public_id');
 
-        expect(mockDeleteImage).toHaveBeenCalledTimes(1);
-        expect(mockDeleteImage).toHaveBeenCalledWith(initialPublicId); 
-        expect(mockUploadImage).toHaveBeenCalledTimes(1);
+        expect(deleteImage).toHaveBeenCalledTimes(1);
+        expect(deleteImage).toHaveBeenCalledWith(initialPublicId);
+        expect(uploadImage).toHaveBeenCalledTimes(1);
 
         const dbProduct = await Product.findById(testProductId);
         expect(dbProduct.name).toBe(updates.name);
@@ -336,12 +332,11 @@ describe('PUT /:id', () => {
             .field('description', updates.description)
             .expect(200);
 
+        expect(deleteImage).not.toHaveBeenCalled();
+        expect(uploadImage).not.toHaveBeenCalled();
         expect(res.body.description).toBe(updates.description);
         expect(res.body.image).toBe('http://original.com/image.jpg');
         expect(res.body.imagePublicId).toBe(initialPublicId); 
-
-        expect(mockDeleteImage).not.toHaveBeenCalled();
-        expect(mockUploadImage).not.toHaveBeenCalled();
 
         const dbProduct = await Product.findById(testProductId);
         expect(dbProduct.description).toBe(updates.description);
@@ -390,8 +385,8 @@ describe('DELETE /:id', () => {
             .set('Authorization', `Bearer ${adminToken}`)
             .expect(200); 
 
-        expect(mockDeleteImage).toHaveBeenCalledTimes(1);
-        expect(mockDeleteImage).toHaveBeenCalledWith(publicIdToDelete);
+            expect(deleteImage).toHaveBeenCalledTimes(1);
+            expect(deleteImage).toHaveBeenCalledWith(publicIdToDelete);
 
         const dbProduct = await Product.findById(testProductId);
         expect(dbProduct).toBeNull();
@@ -403,7 +398,7 @@ describe('DELETE /:id', () => {
             .delete(`/api/products/${nonExistentId}`)
             .set('Authorization', `Bearer ${adminToken}`)
             .expect(404);
-        expect(mockDeleteImage).not.toHaveBeenCalled();
+            expect(deleteImage).not.toHaveBeenCalled(); 
     });
 
     it('Usuário normal NÃO deve conseguir deletar produto (403)', async () => {
@@ -411,7 +406,7 @@ describe('DELETE /:id', () => {
             .delete(`/api/products/${testProductId}`)
             .set('Authorization', `Bearer ${userToken}`)
             .expect(403);
-        expect(mockDeleteImage).not.toHaveBeenCalled();
+            expect(deleteImage).not.toHaveBeenCalled();
     });
 
      it('Deve funcionar mesmo se produto não tiver publicId (apenas loga warn)', async () => {
@@ -424,7 +419,7 @@ describe('DELETE /:id', () => {
             .set('Authorization', `Bearer ${adminToken}`)
             .expect(200);
 
-         expect(mockDeleteImage).not.toHaveBeenCalled(); 
+            expect(deleteImage).not.toHaveBeenCalled();
          const dbProduct = await Product.findById(productNoPublicId._id);
          expect(dbProduct).toBeNull();
      });

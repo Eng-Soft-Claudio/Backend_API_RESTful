@@ -25,9 +25,9 @@ export const createProduct = async (req, res, next) => {
             console.error("Controller createProduct: req.file não definido após middlewares.");
             return res.status(400).json({ error: 'Arquivo de imagem obrigatório não encontrado.' });
         }
-
+        console.log("EXECUTANDO createProduct - Antes do uploadImage");
         const result = await uploadImage(req.file.path);
-
+        console.log("EXECUTANDO createProduct - Após uploadImage, result:", result);
         const productData = {
             name: req.body.name,
             price: Number(req.body.price), 
@@ -49,6 +49,7 @@ export const createProduct = async (req, res, next) => {
         res.status(201).json(populatedProduct); 
 
     } catch (err) {
+        console.error("ERRO NO CATCH de createProduct:", err);
         next(err); 
     }
 };
@@ -155,8 +156,9 @@ export const updateProduct = async (req, res, next) => {
                     console.error(`Falha ao deletar imagem antiga ${oldPublicId} do Cloudinary durante update:`, cloudinaryErr.message);
                 }
             }
-
+            console.log("EXECUTANDO updateProduct - Antes do uploadImage"); 
             const result = await uploadImage(req.file.path);
+            console.log("EXECUTANDO updateProduct - Após uploadImage, result:", result);
             updates.image = result.secure_url;       
             updates.imagePublicId = result.public_id; 
         } else {
@@ -183,6 +185,7 @@ export const updateProduct = async (req, res, next) => {
         res.status(200).json(product);
 
     } catch (err) {
+        console.error("ERRO NO CATCH de updateProduct:", err);
         next(err);
     }
 };

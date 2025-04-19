@@ -5,6 +5,7 @@ import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import productRoutes from './routes/products.js';
 import categoryRoutes from './routes/category.js'; 
+import addressRoutes from './routes/addressRoutes.js'; 
 import swaggerUI from 'swagger-ui-express';
 import swaggerJSDoc from 'swagger-jsdoc';
 import { apiLimiter, corsOptions } from './config/security.js';
@@ -29,15 +30,13 @@ const options = {
       title: 'API de E-commerce',
       version: '1.0.0',
       description: 'API RESTful base para funcionalidades de e-commerce, incluindo autenticação, usuários, categorias e produtos.',
-      contact: { name: 'Cláudio de Lima Tosta', email: 'eng-soft-claudio@gmail.com' }, // Opcional
+      contact: { name: 'Cláudio de Lima Tosta', email: 'eng-soft-claudio@gmail.com' },
     },
     servers: [
       {
         url: `http://localhost:${process.env.PORT || 5000}`,
         description: 'Servidor de Desenvolvimento'
       },
-      // Adicionar URL de produção aqui quando tiver
-      // { url: 'https://sua-api-producao.com', description: 'Servidor de Produção'}
     ],
     
     // --- Componentes Reutilizáveis ---
@@ -45,7 +44,7 @@ const options = {
       // Schemas (Modelos de Dados)
       schemas: {
         // Usuários
-        UserInputRegister: { // Específico para Registro
+        UserInputRegister: { 
           type: 'object',
           required: ['name', 'email', 'password', 'passwordConfirm'],
           properties: {
@@ -55,7 +54,7 @@ const options = {
             passwordConfirm: { type: 'string', format: 'password', example: 'senhaForte123' },
           }
         },
-        UserInputLogin: { // Específico para Login
+        UserInputLogin: { 
           type: 'object',
           required: ['email', 'password'],
           properties: {
@@ -63,14 +62,14 @@ const options = {
             password: { type: 'string', format: 'password', example: 'senhaForte123' },
           }
         },
-         UserInputUpdateMe: { // Específico para atualizar próprio perfil
+         UserInputUpdateMe: { 
             type: 'object',
             properties: {
                 name: { type: 'string', example: 'João da Silva Sauro' },
                 email: { type: 'string', format: 'email', example: 'joao.sauro@email.com' },
             }
          },
-         UserUpdatePasswordInput: { // Específico para mudar senha
+         UserUpdatePasswordInput: { 
              type: 'object',
              required: ['currentPassword', 'password', 'passwordConfirm'],
              properties: {
@@ -79,7 +78,7 @@ const options = {
                  passwordConfirm: { type: 'string', format: 'password', example: 'novaSenhaForte456' },
              }
          },
-        UserOutput: { // Representação do usuário na resposta
+        UserOutput: { 
           type: 'object',
           properties: {
             _id: { type: 'string', format: 'objectid', example: '68015a91320b9fa9419079be' },
@@ -113,17 +112,17 @@ const options = {
         // Produtos
         ProductInput: {
             type: 'object',
-            required: ['name', 'price', 'category', 'image'], // Assumindo imagem obrigatória na criação
+            required: ['name', 'price', 'category', 'image'], 
             properties: {
                  name: { type: 'string', example: 'Laptop XPTO Pro' },
                  description: { type: 'string', example: 'Laptop de alta performance.' },
                  price: { type: 'number', format: 'float', minimum: 0.01, example: 1599.99 },
                  category: { type: 'string', format: 'objectid', description: 'ID da Categoria', example: '6801350d65d4d9e110605dbaf' },
                  stock: { type: 'integer', minimum: 0, example: 50 },
-                 image: { type: 'string', format: 'binary', description: '(Via form-data) Arquivo de imagem do produto.' }, // Indicar que é via form-data
+                 image: { type: 'string', format: 'binary', description: '(Via form-data) Arquivo de imagem do produto.' }, 
             }
         },
-         ProductUpdateInput: { // Para atualização, campos são opcionais
+         ProductUpdateInput: { 
             type: 'object',
             properties: {
                  name: { type: 'string', example: 'Laptop XPTO Pro Max' },
@@ -141,7 +140,7 @@ const options = {
                  name: { type: 'string', example: 'Laptop XPTO Pro' },
                  description: { type: 'string', example: 'Laptop de alta performance.' },
                  price: { type: 'number', format: 'float', example: 1599.99 },
-                 category: { $ref: '#/components/schemas/CategoryOutput' }, // Referencia o output da Categoria
+                 category: { $ref: '#/components/schemas/CategoryOutput' }, 
                  stock: { type: 'integer', example: 50 },
                  image: { type: 'string', format: 'url', example: 'https://res.cloudinary.com/...' },
                  imagePublicId: { type: 'string', example: 'ecommerce/products/...' },
@@ -150,25 +149,25 @@ const options = {
             }
         },
         // Respostas Genéricas
-        AuthResponse: { // Resposta de Login/Registro
+        AuthResponse: { 
           type: 'object',
           properties: {
             status: { type: 'string', example: 'success' },
             token: { type: 'string', example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' },
-            data: { // Opcional incluir usuário no registro
+            data: {
               type: 'object',
               properties: { user: { $ref: '#/components/schemas/UserOutput' } }
             }
           }
         },
-        SuccessResponse: { // Resposta genérica de sucesso (ex: delete)
+        SuccessResponse: { 
             type: 'object',
             properties: {
                 status: { type: 'string', example: 'success' },
                 message: { type: 'string', example: 'Operação realizada com sucesso.' },
             }
         },
-        ErrorValidationResponse: { // Erro de validação express-validator
+        ErrorValidationResponse: { 
              type: 'object',
                properties: {
                  errors: {
@@ -177,7 +176,7 @@ const options = {
                  }
              }
         },
-        ErrorResponse: { // Erro padrão do AppError
+        ErrorResponse: { 
            type: 'object',
            properties: {
              status: { type: 'string', example: 'fail' },
@@ -195,23 +194,63 @@ const options = {
         }
       }
     },
-     
+     // Esquemas de Endereço
+     AddressInput: {
+      type: 'object',
+      required: ['street', 'number', 'neighborhood', 'city', 'state', 'postalCode'], 
+      properties: {
+          label: { type: 'string', maxLength: 50, example: 'Casa', description: 'Rótulo opcional para identificar o endereço.' },
+          street: { type: 'string', maxLength: 200, example: 'Rua das Flores', description: 'Nome da rua, avenida, etc.' },
+          number: { type: 'string', maxLength: 20, example: '123A', description: 'Número do imóvel (ou S/N).' },
+          complement: { type: 'string', maxLength: 100, example: 'Apto 42', description: 'Complemento (opcional).' },
+          neighborhood: { type: 'string', maxLength: 100, example: 'Centro', description: 'Bairro.' },
+          city: { type: 'string', maxLength: 100, example: 'Cidade Exemplo', description: 'Município.' },
+          state: { type: 'string', minLength: 2, maxLength: 2, example: 'SP', description: 'Sigla do Estado (UF).' },
+          postalCode: { type: 'string', example: '12345-678', description: 'CEP (formato XXXXX-XXX ou XXXXXXXXX).' },
+          country: { type: 'string', maxLength: 50, example: 'Brasil', default: 'Brasil', description: 'País.' },
+          phone: { type: 'string', maxLength: 20, example: '(11) 98765-4321', description: 'Telefone de contato (opcional).' },
+          isDefault: { type: 'boolean', example: false, default: false, description: 'Marcar como endereço padrão?' }
+      }
   },
-  apis: ['./routes/*.js'], // Arquivos onde buscar as anotações das rotas
+    AddressOutput: {
+      type: 'object',
+      properties: {
+          _id: { type: 'string', format: 'objectid', example: '6701a...' },
+          user: { type: 'string', format: 'objectid', description: 'ID do usuário proprietário.', example: '68015a91320b9fa9419079be' },
+          label: { type: 'string', example: 'Casa' },
+          street: { type: 'string', example: 'Rua das Flores' },
+          number: { type: 'string', example: '123A' },
+          complement: { type: 'string', example: 'Apto 42' },
+          neighborhood: { type: 'string', example: 'Centro' },
+          city: { type: 'string', example: 'Cidade Exemplo' },
+          state: { type: 'string', example: 'SP' },
+          postalCode: { type: 'string', example: '12345-678' },
+          country: { type: 'string', example: 'Brasil' },
+          phone: { type: 'string', example: '(11) 98765-4321' },
+          isDefault: { type: 'boolean', example: false },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+      }
+  },
+},
+apis: ['./routes/*.js'],
 };
 
 // Middlewares
 app.use(express.json());
 app.use(cors(corsOptions));
 app.use('/api/', apiLimiter);
-app.use(globalErrorHandler); 
 
 // Rotas
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/addresses', addressRoutes); 
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api-docs', swaggerUI.serve, swaggerUI.setup(swaggerJSDoc(options)));
+
+// Middleware de Erro GLOBAL
+app.use(globalErrorHandler); 
 
 export default app; 
