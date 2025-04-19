@@ -6,7 +6,8 @@ import userRoutes from './routes/users.js';
 import productRoutes from './routes/products.js';
 import categoryRoutes from './routes/category.js'; 
 import addressRoutes from './routes/addressRoutes.js';
-import cartRoutes from './routes/cartRoutes.js'; 
+import cartRoutes from './routes/cartRoutes.js';
+import orderRoutes from './routes/orderRoutes.js';  
 import swaggerUI from 'swagger-ui-express';
 import swaggerJSDoc from 'swagger-jsdoc';
 import { apiLimiter, corsOptions } from './config/security.js';
@@ -292,7 +293,106 @@ const options = {
               description: 'Data da última atualização do carrinho.'
           }
       }
-},
+  },
+  // Esquemas de pedidos
+  OrderItemOutput: { // Schema para os itens DENTRO da resposta do pedido
+    type: 'object',
+    description: 'Representa um item dentro de um pedido.',
+    properties: {
+        productId: {
+            type: 'string',
+            format: 'objectid',
+            description: 'ID do produto original.',
+            example: '6801a...'
+        },
+        name: {
+            type: 'string',
+            description: 'Nome do produto no momento da compra.',
+            example: 'Laptop XPTO Pro'
+        },
+        quantity: {
+            type: 'integer',
+            description: 'Quantidade comprada.',
+            example: 1
+        },
+        price: {
+            type: 'number',
+            format: 'float',
+            description: 'Preço unitário no momento da compra.',
+            example: 1599.99
+        },
+        image: {
+            type: 'string',
+            format: 'url',
+            description: 'URL da imagem do produto.',
+            example: 'https://res.cloudinary.com/...'
+        }
+    }
+ },
+ OrderShippingAddressOutput: { // Schema para o endereço EMBUTIDO no pedido
+     type: 'object',
+     description: 'Endereço de entrega registrado no pedido.',
+     properties: {
+         label: { type: 'string', example: 'Casa' },
+         street: { type: 'string', example: 'Rua das Flores' },
+         number: { type: 'string', example: '123A' },
+         complement: { type: 'string', example: 'Apto 42', nullable: true },
+         neighborhood: { type: 'string', example: 'Centro' },
+         city: { type: 'string', example: 'Cidade Exemplo' },
+         state: { type: 'string', example: 'SP' },
+         postalCode: { type: 'string', example: '12345-678' },
+         country: { type: 'string', example: 'Brasil' },
+         phone: { type: 'string', example: '(11) 98765-4321', nullable: true }
+     }
+ },
+ OrderPaymentResultOutput: { // Schema para o resultado do pagamento
+      type: 'object',
+      nullable: true, 
+      description: 'Detalhes do resultado do pagamento (se aplicável).',
+      properties: {
+          id: { type: 'string', description: 'ID da transação no gateway.', example: 'pi_123...' },
+          status: { type: 'string', description: 'Status do pagamento no gateway.', example: 'succeeded' },
+          update_time: { type: 'string', description: 'Timestamp da atualização do pagamento.', example: '2023-10-27T10:00:00Z' },
+          email_address: { type: 'string', format: 'email', description: 'Email do pagador (se fornecido pelo gateway).', example: 'pagador@email.com' }
+      }
+ },
+ OrderOutput: { // Schema principal para a resposta do pedido
+     type: 'object',
+     description: 'Representa um pedido realizado.',
+     properties: {
+         _id: { type: 'string', format: 'objectid', example: '6a02c...' },
+         user: { 
+             oneOf: [
+                 { type: 'string', format: 'objectid' },
+                 { $ref: '#/components/schemas/UserOutput' }
+             ],
+            description: 'ID ou detalhes do usuário que fez o pedido.'
+         },
+         orderItems: {
+             type: 'array',
+             items: { $ref: '#/components/schemas/OrderItemOutput' }
+         },
+         shippingAddress: {
+             $ref: '#/components/schemas/OrderShippingAddressOutput'
+         },
+         paymentMethod: { type: 'string', example: 'PIX' },
+         paymentResult: {
+             $ref: '#/components/schemas/OrderPaymentResultOutput'
+         },
+         itemsPrice: { type: 'number', format: 'float', example: 1649.99 },
+         shippingPrice: { type: 'number', format: 'float', example: 10.00 },
+         totalPrice: { type: 'number', format: 'float', example: 1659.99 },
+         orderStatus: {
+             type: 'string',
+             enum: ['pending_payment', 'failed', 'processing', 'shipped', 'delivered', 'cancelled'],
+             example: 'processing'
+         },
+         paidAt: { type: 'string', format: 'date-time', nullable: true },
+         deliveredAt: { type: 'string', format: 'date-time', nullable: true },
+         createdAt: { type: 'string', format: 'date-time' },
+         updatedAt: { type: 'string', format: 'date-time' },
+     }
+ },
 
 }, 
 apis: ['./routes/*.js'],
@@ -310,7 +410,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/addresses', addressRoutes);
-app.use('/api/cart', cartRoutes); 
+app.use('/api/cart', cartRoutes);
+app.use('/api/orders', orderRoutes);  
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api-docs', swaggerUI.serve, swaggerUI.setup(swaggerJSDoc(options)));
 

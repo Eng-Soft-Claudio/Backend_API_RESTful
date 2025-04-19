@@ -223,8 +223,11 @@ export const removeCartItem = async (req, res, next) => {
         });
 
     } catch (err) {
-        next(err);
-    }
+        if (err.name === 'CastError') {
+           return next(new AppError(`ID de produto inválido: ${productId}`, 400));
+        }
+       next(err);
+   }
 };
 
 
