@@ -5,7 +5,8 @@ import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import productRoutes from './routes/products.js';
 import categoryRoutes from './routes/category.js'; 
-import addressRoutes from './routes/addressRoutes.js'; 
+import addressRoutes from './routes/addressRoutes.js';
+import cartRoutes from './routes/cartRoutes.js'; 
 import swaggerUI from 'swagger-ui-express';
 import swaggerJSDoc from 'swagger-jsdoc';
 import { apiLimiter, corsOptions } from './config/security.js';
@@ -232,9 +233,71 @@ const options = {
           updatedAt: { type: 'string', format: 'date-time' },
       }
   },
+  // Esquemas de Carrinho de Compras
+    CartItemOutput: {
+      type: 'object',
+      description: 'Representa um item dentro do carrinho de compras.',
+      properties: {
+          product: {
+              $ref: '#/components/schemas/ProductOutput', 
+              description: 'Detalhes do produto neste item do carrinho.'
+          },
+          quantity: {
+              type: 'integer',
+              example: 2,
+              description: 'Quantidade deste produto no carrinho.'
+          },
+          subtotal: {
+              type: 'number',
+              format: 'float',
+              example: 3199.98,
+              description: 'Subtotal calculado para este item (preço * quantidade). Campo virtual.'
+          }
+      }
+  },
+  CartOutput: {
+      type: 'object',
+      description: 'Representa o carrinho de compras de um usuário.',
+      properties: {
+          _id: {
+              type: 'string',
+              format: 'objectid',
+              nullable: true, 
+              example: '6901b...' ,
+              description: 'ID único do carrinho (null se ainda não salvo).'
+          },
+          user: {
+              type: 'string',
+              format: 'objectid',
+              example: '68015a91320b9fa9419079be',
+              description: 'ID do usuário dono do carrinho.'
+          },
+          items: {
+              type: 'array',
+              description: 'Lista de itens no carrinho.',
+              items: {
+                  $ref: '#/components/schemas/CartItemOutput' 
+              }
+          },
+          createdAt: {
+              type: 'string',
+              format: 'date-time',
+              nullable: true, 
+              description: 'Data de criação do carrinho.'
+          },
+          updatedAt: {
+              type: 'string',
+              format: 'date-time',
+              nullable: true, 
+              description: 'Data da última atualização do carrinho.'
+          }
+      }
 },
+
+}, 
 apis: ['./routes/*.js'],
 };
+
 
 // Middlewares
 app.use(express.json());
@@ -246,7 +309,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
-app.use('/api/addresses', addressRoutes); 
+app.use('/api/addresses', addressRoutes);
+app.use('/api/cart', cartRoutes); 
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api-docs', swaggerUI.serve, swaggerUI.setup(swaggerJSDoc(options)));
 
