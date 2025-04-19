@@ -195,9 +195,9 @@ const options = {
           description: 'Autenticação via Token JWT (incluir "Bearer " antes do token).',
         }
       }
-    },
-     // Esquemas de Endereço
-     AddressInput: {
+      },
+       // Esquemas de Endereço
+       AddressInput: {
       type: 'object',
       required: ['street', 'number', 'neighborhood', 'city', 'state', 'postalCode'], 
       properties: {
@@ -213,8 +213,8 @@ const options = {
           phone: { type: 'string', maxLength: 20, example: '(11) 98765-4321', description: 'Telefone de contato (opcional).' },
           isDefault: { type: 'boolean', example: false, default: false, description: 'Marcar como endereço padrão?' }
       }
-  },
-    AddressOutput: {
+      },
+      AddressOutput: {
       type: 'object',
       properties: {
           _id: { type: 'string', format: 'objectid', example: '6701a...' },
@@ -233,9 +233,9 @@ const options = {
           createdAt: { type: 'string', format: 'date-time' },
           updatedAt: { type: 'string', format: 'date-time' },
       }
-  },
-  // Esquemas de Carrinho de Compras
-    CartItemOutput: {
+      },
+      // Esquemas de Carrinho de Compras
+      CartItemOutput: {
       type: 'object',
       description: 'Representa um item dentro do carrinho de compras.',
       properties: {
@@ -255,8 +255,8 @@ const options = {
               description: 'Subtotal calculado para este item (preço * quantidade). Campo virtual.'
           }
       }
-  },
-  CartOutput: {
+      },
+      CartOutput: {
       type: 'object',
       description: 'Representa o carrinho de compras de um usuário.',
       properties: {
@@ -293,9 +293,9 @@ const options = {
               description: 'Data da última atualização do carrinho.'
           }
       }
-  },
-  // Esquemas de pedidos
-  OrderItemOutput: { // Schema para os itens DENTRO da resposta do pedido
+      },
+      // Esquemas de pedidos
+      OrderItemOutput: {
     type: 'object',
     description: 'Representa um item dentro de um pedido.',
     properties: {
@@ -328,8 +328,8 @@ const options = {
             example: 'https://res.cloudinary.com/...'
         }
     }
- },
- OrderShippingAddressOutput: { // Schema para o endereço EMBUTIDO no pedido
+      },
+      OrderShippingAddressOutput: { 
      type: 'object',
      description: 'Endereço de entrega registrado no pedido.',
      properties: {
@@ -344,8 +344,8 @@ const options = {
          country: { type: 'string', example: 'Brasil' },
          phone: { type: 'string', example: '(11) 98765-4321', nullable: true }
      }
- },
- OrderPaymentResultOutput: { // Schema para o resultado do pagamento
+      },
+      OrderPaymentResultOutput: { 
       type: 'object',
       nullable: true, 
       description: 'Detalhes do resultado do pagamento (se aplicável).',
@@ -355,8 +355,8 @@ const options = {
           update_time: { type: 'string', description: 'Timestamp da atualização do pagamento.', example: '2023-10-27T10:00:00Z' },
           email_address: { type: 'string', format: 'email', description: 'Email do pagador (se fornecido pelo gateway).', example: 'pagador@email.com' }
       }
- },
- OrderOutput: { // Schema principal para a resposta do pedido
+      },
+      OrderOutput: { 
      type: 'object',
      description: 'Representa um pedido realizado.',
      properties: {
@@ -392,7 +392,25 @@ const options = {
          createdAt: { type: 'string', format: 'date-time' },
          updatedAt: { type: 'string', format: 'date-time' },
      }
- },
+      },
+      // Esquema de pagamento via PIX
+      OrderPaymentResponse: {
+        type: 'object',
+        description: 'Resposta ao iniciar um pagamento PIX via Mercado Pago.',
+        properties: {
+            status: { type: 'string', example: 'success' },
+            message: { type: 'string', example: 'Pagamento PIX iniciado. Use os dados abaixo para pagar.' },
+            data: {
+                type: 'object',
+                properties: {
+                    orderId: { type: 'string', format: 'objectid', description: 'ID do pedido associado.', example: '6a02c...'},
+                    mercadopagoPaymentId: { type: 'string', description: 'ID do pagamento no Mercado Pago.', example: '123456789'},
+                    qrCodeBase64: { type: 'string', format: 'byte', description: 'String Base64 da imagem do QR Code PIX.' },
+                    qrCode: { type: 'string', description: 'Código PIX Copia e Cola.' }
+                }
+            }
+        }
+    },
 
 }, 
 apis: ['./routes/*.js'],

@@ -7,7 +7,8 @@ import { authenticate } from '../middleware/auth.js'; // Autenticação sempre n
 import {
     createOrder,
     getMyOrders,
-    getOrderById
+    getOrderById,
+    createOrderPayment
     // Importar outras funções do controller quando forem criadas
 } from '../controllers/orderController.js';
 import Address from '../models/Address.js'; 
@@ -144,6 +145,52 @@ router.get(
 
 /**
  * @swagger
+ * /api/orders/{id}/create-payment:
+ *   post:
+ *     summary: Inicia um pagamento PIX para um pedido existente.
+ *     tags: [Orders]
+ *     description: Cria uma solicitação de pagamento PIX junto ao Mercado Pago para um pedido que está com status 'pending_payment'. Retorna os dados necessários para exibir o QR Code e o código Copia e Cola.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: objectid
+ *         description: ID do pedido para o qual iniciar o pagamento.
+ *     responses:
+ *       '200':
+ *         description: Dados PIX gerados com sucesso.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/OrderPaymentResponse' # Definir este schema
+ *       '400':
+ *         description: Erro (Pedido já pago, status inválido, erro ao gerar PIX no MP).
+ *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+ *       '401':
+ *         description: Não autorizado.
+ *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+ *       '404':
+ *         description: Pedido não encontrado ou não pertence ao usuário.
+ *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+ *       '500':
+ *         description: Erro interno do servidor.
+ *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+ *       '502':
+ *         description: Erro na comunicação com o Mercado Pago.
+ *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+ */
+router.post(
+    '/:id/create-payment',
+    orderIdParamValidation, 
+    createOrderPayment   
+);
+
+/**
+ * @swagger
  * /api/orders/{id}:
  *   get:
  *     summary: Obtém detalhes de um pedido específico (próprio ou qualquer um se for admin).
@@ -190,18 +237,6 @@ router.get(
     getOrderById
 );
 
-// --- Rotas Futuras (Admin) ---
-// Exemplo: Atualizar status do pedido
-// router.patch(
-//     '/:id/status',
-//     authenticate,
-//     isAdmin,
-//     orderIdParamValidation,
-//     body('status', 'Status inválido').isIn(['processing', 'shipped', 'delivered', 'cancelled']),
-//     updateOrderStatus // Função a ser criada no controller
-// );
-
-// Exemplo: Marcar como pago (poderia ser chamado por webhook ou admin)
-// router.put('/:id/pay', authenticate, /*isAdmin or specific logic*/, orderIdParamValidation, markOrderAsPaid);
+// --- Rotas Futuras ---
 
 export default router;

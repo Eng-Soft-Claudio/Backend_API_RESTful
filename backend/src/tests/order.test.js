@@ -11,6 +11,25 @@ import Category from '../models/Category.js';
 import User from '../models/User.js'; 
 import Address from '../models/Address.js';
 
+// Mock para teste com Mercado Pago
+jest.mock('mercadopago', () => {
+    const mockPaymentCreate = jest.fn(); 
+    const MockPayment = jest.fn().mockImplementation(() => ({
+        create: mockPaymentCreate
+    }));
+    const MockMercadoPagoConfig = jest.fn();
+
+    return {
+        MercadoPagoConfig: MockMercadoPagoConfig,
+        Payment: MockPayment,
+        __esModule: true, 
+        _mockPaymentCreate: mockPaymentCreate 
+    };
+});
+
+// Importar a função mock específica que exportamos para controle
+import { _mockPaymentCreate as mockMercadoPagoPaymentCreate } from 'mercadopago';
+
 let mongoServer;
 let testUserToken; 
 let testUserId;
@@ -67,6 +86,27 @@ beforeAll(async () => {
         postalCode: '98765-432'
     });
     userAddressId = address._id;
+});
+
+beforeEach(async () => {
+    // Limpar mocks antes de cada teste
+    mockMercadoPagoPaymentCreate.mockClear();
+    // Configurar retorno PADRÃO bem-sucedido para o mock do MP
+    mockMercadoPagoPaymentCreate.mockResolvedValue({
+        id: 1234567890,
+        point_of_interaction: {
+            transaction_data: {
+                qr_code_base64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', // QR Code base64 dummy
+                qr_code: '00020126580014...',
+            }
+        }
+    });
+    // Limpar Carrinhos e Pedidos
+    await Cart.deleteMany({});
+    await Order.deleteMany({});
+    // Resetar estoque
+    await Product.findByIdAndUpdate(product1Id, { stock: 15 });
+    await Product.findByIdAndUpdate(product2Id, { stock: 3 });
 });
 
 // Limpar Carrinhos e Pedidos após cada teste
@@ -359,6 +399,111 @@ describe('/api/orders', () => {
                 .get(`/api/orders/${userOrder._id}`)
                 .expect(401);
         });
+    });
+
+    // --- Testes POST /:id/create-payment ---
+    describe('POST /:id/create-payment', () => {
+        let testOrder; // Pedido criado
+
+        // Cria um pedido PENDENTE antes de cada teste deste bloco
+        beforeEach(async () => {
+            const orderData = {
+                user: testUserId,
+                orderItems: [{ productId: product1Id, name: 'Prod 1 Pay', quantity: 1, price: 25, image: 'p1.jpg' }],
+                shippingAddress: { street: 'Pay St', number: '1', neighborhood: 'Pay', city: 'Pay', state: 'PY', postalCode: '11111-111', country: 'Payland' },
+                paymentMethod: 'PIX', 
+                itemsPrice: 25,
+                shippingPrice: 10,
+                totalPrice: 35,
+                orderStatus: 'pending_payment' 
+            };
+            testOrder = await Order.create(orderData);
+        });
+
+        it('deve criar um pagamento PIX com sucesso para um pedido pendente', async () => {
+            const res = await request(app)
+                .post(`/api/orders/${testOrder._id}/create-payment`)
+                .set('Authorization', `Bearer ${testUserToken}`)
+                .send({})
+                .expect('Content-Type', /json/)
+                .expect(200);
+
+            expect(res.body.status).toBe('success');
+            expect(res.body.message).toContain('Pagamento PIX iniciado');
+            expect(res.body.data).toBeDefined();
+            expect(res.body.data.orderId.toString()).toBe(testOrder._id.toString());
+            expect(res.body.data.mercadopagoPaymentId).toBe(1234567890)
+            expect(res.body.data.qrCodeBase64).toBeDefined();
+            expect(res.body.data.qrCode).toBeDefined();
+
+            // Verifica se a chamada ao mock do MP foi feita corretamente
+            expect(mockMercadoPagoPaymentCreate).toHaveBeenCalledTimes(1);
+            expect(mockMercadoPagoPaymentCreate).toHaveBeenCalledWith(expect.objectContaining({
+                body: expect.objectContaining({
+                    transaction_amount: testOrder.totalPrice, 
+                    payment_method_id: 'pix',
+                    payer: expect.objectContaining({ email: 'order.user@test.com' }), 
+                    external_reference: testOrder._id.toString() 
+                })
+            }));
+
+            // Verifica se o ID do pagamento MP foi salvo no pedido no DB
+            const dbOrder = await Order.findById(testOrder._id);
+            expect(dbOrder.mercadopagoPaymentId).toBe('1234567890'); 
+        });
+
+        it('deve retornar 404 se o pedido não for encontrado', async () => {
+            const nonExistentId = new mongoose.Types.ObjectId();
+            await request(app)
+                .post(`/api/orders/${nonExistentId}/create-payment`)
+                .set('Authorization', `Bearer ${testUserToken}`)
+                .send({})
+                .expect(404);
+            expect(mockMercadoPagoPaymentCreate).not.toHaveBeenCalled();
+        });
+
+        it('deve retornar 400 se o pedido não estiver pendente de pagamento', async () => {
+            // Mudar status do pedido para 'processing'
+            await Order.findByIdAndUpdate(testOrder._id, { orderStatus: 'processing' });
+
+            await request(app)
+                .post(`/api/orders/${testOrder._id}/create-payment`)
+                .set('Authorization', `Bearer ${testUserToken}`)
+                .send({})
+                .expect(400);
+            expect(mockMercadoPagoPaymentCreate).not.toHaveBeenCalled();
+        });
+
+        it('deve retornar 400 se o pedido já tiver um ID de pagamento MP', async () => {
+            // Adicionar um ID de pagamento ao pedido
+             await Order.findByIdAndUpdate(testOrder._id, { mercadopagoPaymentId: 'EXISTING_MP_ID' });
+
+             await request(app)
+                .post(`/api/orders/${testOrder._id}/create-payment`)
+                .set('Authorization', `Bearer ${testUserToken}`)
+                .send({})
+                .expect(400);
+            expect(mockMercadoPagoPaymentCreate).not.toHaveBeenCalled();
+        });
+
+         it('deve retornar 502 se o Mercado Pago retornar erro', async () => {
+             // Configura o mock para REJEITAR a promessa
+             mockMercadoPagoPaymentCreate.mockRejectedValue(new Error('Erro simulado do MP'));
+
+             await request(app)
+                .post(`/api/orders/${testOrder._id}/create-payment`)
+                .set('Authorization', `Bearer ${testUserToken}`)
+                .send({})
+                .expect(500); 
+            expect(mockMercadoPagoPaymentCreate).toHaveBeenCalledTimes(1);
+         });
+
+         it('deve retornar 401 se não estiver autenticado', async () => {
+             await request(app)
+                .post(`/api/orders/${testOrder._id}/create-payment`)
+                .send({})
+                .expect(401);
+         });
     });
 
 }); 

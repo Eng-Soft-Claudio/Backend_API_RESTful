@@ -6,6 +6,8 @@ import Address from '../models/Address.js';
 import AppError from '../utils/appError.js';
 import { validationResult } from 'express-validator';
 import mongoose from 'mongoose'; 
+import mpClient, { Payment, isMercadoPagoConfigured } from '../config/mercadopago.js';
+import User from '../models/User.js';
 
 // --- Criar um Novo Pedido ---
 export const createOrder = async (req, res, next) => {
@@ -226,6 +228,137 @@ export const getOrderById = async (req, res, next) => {
             return next(new AppError(`ID de pedido inválido: ${req.params.id}`, 400));
         }
         next(err);
+    }
+};
+
+// --- Iniciar Pagamento PIX para um Pedido ---
+export const createOrderPayment = async (req, res, next) => {
+    // Validação do ID do pedido feita na rota
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
+
+    const orderId = req.params.id;
+    const userId = req.user.id;
+
+    try {
+        // Verificar se o SDK foi configurado corretamente
+        if (!isMercadoPagoConfigured() || !mpClient) {
+            console.error("ERRO: SDK do Mercado Pago não está configurado corretamente (sem Access Token).");
+            return next(new AppError('Configuração do gateway de pagamento incompleta.', 500));
+       }
+
+        // 1. Buscar o Pedido e verificar propriedade e status
+        const order = await Order.findOne({ _id: orderId, user: userId });
+
+        if (!order) {
+            return next(new AppError('Pedido não encontrado ou não pertence a você.', 404));
+        }
+
+        // Verificar se o pedido já foi pago ou está em outro status inadequado
+        if (order.orderStatus !== 'pending_payment') {
+            return next(new AppError(`Este pedido não está mais pendente de pagamento (Status: ${order.orderStatus}).`, 400));
+        }
+
+        // Verificar se já existe um MP Payment ID (evitar criar múltiplos pagamentos para o mesmo pedido)
+        if (order.mercadopagoPaymentId) {
+            console.warn(`Tentativa de criar novo pagamento para pedido ${orderId} que já possui MP ID ${order.mercadopagoPaymentId}`);
+             return next(new AppError(`Pagamento para este pedido já foi iniciado.`, 400));
+        }
+
+        // 2. Buscar dados do usuário (para email do pagador)
+        const user = await User.findById(userId);
+        if (!user) {
+             return next(new AppError('Usuário associado ao pedido não encontrado.', 404)); 
+        }
+
+        // 3. Preparar dados para a API do Mercado Pago
+        const paymentData = {
+            transaction_amount: order.totalPrice, 
+            description: `Pedido #${order._id.toString().slice(-6)} - E-commerce`,
+            payment_method_id: 'pix', 
+            payer: {
+                email: user.email, 
+            },
+            external_reference: order._id.toString(),
+            notification_url: process.env.MERCADOPAGO_WEBHOOK_URL,
+            date_of_expiration: new Date(Date.now() + 30 * 60 * 1000).toISOString()
+        };
+
+        console.log("DEBUG: Enviando dados para API Mercado Pago:", paymentData);
+
+        // 4. Chamar a API do Mercado Pago para criar o pagamento
+        const payment = new Payment(mpClient);
+        payment.create({ body: paymentData })
+            .then(async (mpResponse) => { // async aqui para usar await dentro do then
+                console.log("DEBUG: Resposta da API Mercado Pago (dentro do then):", mpResponse);
+
+                if (!mpResponse || !mpResponse.id || !mpResponse.point_of_interaction?.transaction_data) {
+                    console.error("ERRO: Resposta inesperada da API Mercado Pago (dentro do then):", mpResponse);
+                    // Precisamos chamar next(error) aqui dentro para o erro ser pego pelo handler global
+                    return next(new AppError('Falha ao iniciar pagamento PIX junto ao Mercado Pago (resposta inválida).', 502));
+                }
+
+                const paymentId = mpResponse.id;
+                const qrCodeBase64 = mpResponse.point_of_interaction.transaction_data.qr_code_base64;
+                const qrCode = mpResponse.point_of_interaction.transaction_data.qr_code;
+
+                order.mercadopagoPaymentId = paymentId.toString();
+                // Salvar o pedido DENTRO do then é crucial se for usar transações
+                // Mas como removemos transações para teste, podemos salvar aqui
+                 try {
+                     await order.save();
+                 } catch(saveErr) {
+                      console.error("Erro ao salvar ID do pagamento no pedido:", saveErr);
+                      // Chamar next aqui também
+                      return next(new AppError('Falha ao atualizar o pedido com dados de pagamento.', 500));
+                 }
+
+
+                res.status(200).json({
+                    status: 'success',
+                    message: 'Pagamento PIX iniciado. Use os dados abaixo para pagar.',
+                    data: {
+                        orderId: order._id,
+                        mercadopagoPaymentId: paymentId,
+                        qrCodeBase64: qrCodeBase64,
+                        qrCode: qrCode
+                    }
+                });
+
+            })
+            .catch(err => { // Captura erros da promessa payment.create
+                console.error("--- ERRO DETALHADO SDK MP (.catch) ---");
+                console.error(err);
+                console.error("------------------------------------");
+
+                let message = 'Falha ao iniciar o processo de pagamento via MP.';
+                const mpErrorMessage = err.cause?.error?.message || err.error?.message || (err.cause ? JSON.stringify(err.cause) : null);
+                if (mpErrorMessage) {
+                    message = `Erro do Mercado Pago: ${mpErrorMessage}`;
+                } else if (err.message) {
+                     message = err.message;
+                }
+                // Chama next DENTRO do catch
+                next(new AppError(message, err.statusCode || 500));
+            });
+
+    } catch (err) {
+        console.error("--- ERRO DETALHADO SDK MP ---");
+        console.error(err);
+        console.error("-----------------------------");
+        console.error("Erro ao criar pagamento PIX:", err?.cause || err.error || err); 
+        let message = 'Falha ao iniciar o processo de pagamento.';
+
+        const mpErrorMessage = err.cause?.error?.message || err.error?.message || (err.cause ? JSON.stringify(err.cause) : null);
+
+        if (err.cause?.error?.message) {
+            message = `Erro do Mercado Pago: ${mpErrorMessage}`;
+        } else if (err.message) {
+             message = err.message;
+        }
+        next(new AppError(message, err.statusCode || 500));
     }
 };
 

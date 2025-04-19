@@ -57,6 +57,11 @@ const orderSchema = new mongoose.Schema({
         required: [true, 'Método de pagamento é obrigatório.']
     },
 
+    mercadopagoPaymentId: { 
+        type: String,
+        index: true
+    },
+
     paymentResult: { 
         id: { type: String },           
         status: { type: String },       
