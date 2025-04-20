@@ -3,7 +3,6 @@ import Product from '../models/Product.js';
 import Category from '../models/Category.js';
 import { validationResult } from 'express-validator';
 import { uploadImage, deleteImage } from '../utils/cloudinary.js';
-import { triggerWebhook } from './webhooks.js';
 import mongoose from 'mongoose'; 
 import AppError from '../utils/appError.js'; 
 
@@ -39,8 +38,6 @@ export const createProduct = async (req, res, next) => {
         };
 
         const product = await Product.create(productData);
-        
-        await triggerWebhook('product_created', product);
 
         const populatedProduct = await Product.findById(product._id)
             .populate('category', 'name slug') 
@@ -180,7 +177,6 @@ export const updateProduct = async (req, res, next) => {
         if (!product) {
             return next(new AppError('Produto não encontrado após tentativa de update.', 404)); // Pouco provável
         }
-        await triggerWebhook('product_updated', product);
 
         res.status(200).json(product);
 
