@@ -7,19 +7,18 @@ import productRoutes from './routes/products.js';
 import categoryRoutes from './routes/category.js'; 
 import addressRoutes from './routes/addressRoutes.js';
 import cartRoutes from './routes/cartRoutes.js';
-import orderRoutes from './routes/orderRoutes.js';  
+import orderRoutes from './routes/orderRoutes.js'; 
+import webhookRoutes from './routes/webhooks.js'; 
 import swaggerUI from 'swagger-ui-express';
 import swaggerJSDoc from 'swagger-jsdoc';
 import { apiLimiter, corsOptions } from './config/security.js';
 import cors from 'cors';
-import webhookRoutes from './routes/webhooks.js';
 import globalErrorHandler from './middleware/errorHandler.js';
 
 // .env
 dotenv.config();
 
-// Banco de Dados
-connectDB();
+
 
 // Declaração de Constantes
 const app = express();
@@ -425,9 +424,14 @@ apis: ['./routes/*.js'],
 
 
 // Middlewares
-app.use(express.json());
 app.use(cors(corsOptions));
 app.use('/api/', apiLimiter);
+
+// Rota do Webhook
+app.use('/api/webhooks', webhookRoutes); 
+
+// Body parsers globais
+app.use(express.json({ limit: '10kb' }));
 
 // Rotas
 app.use('/api/auth', authRoutes);
@@ -436,11 +440,14 @@ app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/addresses', addressRoutes);
 app.use('/api/cart', cartRoutes);
-app.use('/api/orders', orderRoutes);  
-app.use('/api/webhooks', webhookRoutes);
+app.use('/api/orders', orderRoutes);
+
+// Rota Swagger
 app.use('/api-docs', swaggerUI.serve, swaggerUI.setup(swaggerJSDoc(options)));
 
 // Middleware de Erro GLOBAL
 app.use(globalErrorHandler); 
 
 export default app; 
+
+
