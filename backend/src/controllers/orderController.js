@@ -153,24 +153,25 @@ export const payOrder = async (req, res, next) => {
         order.mercadopagoPaymentId = mpResponse.id.toString();
         order.paymentResult = {
             id: mpResponse.id.toString(),
-            status: mpResponse.status, // Status síncrono (pode ser 'approved', 'rejected', 'in_process')
+            status: mpResponse.status, 
             update_time: mpResponse.date_last_updated || new Date().toISOString(),
             email_address: mpResponse.payer?.email || null,
-            card_brand: mpResponse.payment_method_id, // Salva a bandeira/método
-            card_last_four: mpResponse.card?.last_four_digits || null // Salva últimos 4 digitos se cartão
+            card_brand: mpResponse.payment_method_id, 
+            card_last_four: mpResponse.card?.last_four_digits || null 
         };
-        order.installments = mpResponse.installments || 1; // Salva parcelas
+        order.installments = mpResponse.installments || 1; 
 
         // Atualiza status do pedido local
         if (mpResponse.status === 'approved') {
-            order.orderStatus = 'processing'; // Ou 'paid'
+            order.orderStatus = 'processing';
             order.paidAt = new Date();
+            console.log(`Pagamento ${mpResponse.id} APROVADO sincronamente. Status do pedido atualizado.`);
         } else if (['rejected', 'cancelled', 'failed', 'charged_back'].includes(mpResponse.status)) {
             order.orderStatus = 'failed';
+            console.log(`Pagamento ${mpResponse.id} FALHOU sincronamente. Status do pedido atualizado.`);
             // Considerar retornar estoque aqui se o pagamento for rejeitado imediatamente?
         } else {
-            // Mantém 'pending_payment' para status como 'in_process' ou 'pending'
-            // O webhook confirmará o resultado final depois.
+            // Mantém 'pending_payment' para status como 'authorized', 'in_process' ou 'pending'
             console.log(`Pagamento ${mpResponse.id} com status ${mpResponse.status}. Aguardando confirmação final via webhook.`);
         }
 
@@ -181,7 +182,7 @@ export const payOrder = async (req, res, next) => {
             status: 'success',
             message: `Pagamento processado com status: ${mpResponse.status}`,
             data: {
-                order: order // Retorna o pedido atualizado
+                order: order
             }
         });
 
