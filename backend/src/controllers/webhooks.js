@@ -11,83 +11,86 @@ import mpClient, { Payment, isMercadoPagoConfigured } from '../config/mercadopag
  * Verifica a assinatura de um webhook do Mercado Pago conforme a documentação oficial.
  * Calcula o HMAC-SHA256 sobre um template composto por dados da query string e headers.
  * @param {import('express').Request} req O objeto da requisição Express.
+ * @param {Buffer | undefined} rawBody O corpo RAW da requisição (requer middleware express.raw).
  * @param {string | undefined} webhookSecret O segredo configurado no painel do MP e no .env.
- * @returns {{isValid: boolean, message: string}} Objeto indicando se a assinatura é válida e uma mensagem.
+ * @returns {{isValid: boolean, message: string, notificationPayload: object | null}} Objeto indicando validade, mensagem e payload JSON parseado (se válido).
  */
-const verifyMercadoPagoSignature = (req, webhookSecret) => {
+const verifyMercadoPagoSignature = (req, rawBody, webhookSecret) => {
+    // Adiciona log para depurar o tipo inicial do segredo
+    console.log("Webhook Verify MP - TIPO de webhookSecret (início):", typeof webhookSecret);
+
     // 1. Extrair Headers necessários para validação
     const signatureHeader = req.headers['x-signature'];
-    const requestId = req.headers['x-request-id']; // Opcional, mas usado no template se presente
+    const requestId = req.headers['x-request-id'];
 
     // 2. Validações iniciais
-    if (!signatureHeader) {
-        return { isValid: false, message: "Header 'x-signature' ausente." };
+    if (!signatureHeader) return { isValid: false, message: "Header 'x-signature' ausente.", notificationPayload: null };
+    // Verifica se o segredo existe E é uma string
+    if (!webhookSecret || typeof webhookSecret !== 'string') {
+        console.error("!!! ALERTA: MP_WEBHOOK_SECRET INVÁLIDO !!!");
+        return { isValid: false, message: "MP_WEBHOOK_SECRET inválido ou não configurado.", notificationPayload: null };
     }
-    if (!webhookSecret) {
-        // Logar erro interno, mas retornar mensagem genérica para o MP
-        console.error("CRÍTICO: MP_WEBHOOK_SECRET não configurado no ambiente.");
-        return { isValid: false, message: "Configuração interna incompleta." };
+    // Validação do rawBody
+    if (!rawBody || !Buffer.isBuffer(rawBody) || rawBody.length === 0) {
+        return { isValid: false, message: "Corpo raw ausente/inválido para verificação.", notificationPayload: null };
     }
 
     try {
-        // 3. Parsear Header X-Signature para obter ts e v1
+        // 3. Parsear Header X-Signature
         const sigParts = signatureHeader.split(',').map(part => part.trim().split('='));
         const sigData = Object.fromEntries(sigParts);
-        const timestamp = sigData.ts;         // ts extraído do header
-        const receivedSignature = sigData.v1; // v1 (HMAC) extraído do header
+        const timestamp = sigData.ts;
+        const receivedSignature = sigData.v1;
 
         if (!timestamp || !receivedSignature) {
             throw new Error('Formato inválido do header X-Signature (ts ou v1 ausente).');
         }
 
-        // 4. Extrair data.id da QUERY STRING da URL da notificação
-        const dataId = req.query['data.id']; // Vem da URL: ?data.id=...&type=payment
+        // 4. Extrair data.id da QUERY STRING
+        const dataId = req.query['data.id'];
         if (!dataId) {
              throw new Error("Parâmetro de consulta 'data.id' ausente na URL do webhook.");
         }
 
-        // 5. Construir a String Base (Template Oficial Documentado)
-        // Formato: id:[data.id_url];request-id:[x-request-id_header];ts:[ts_header];
+        // 5. Construir a String Base (Template Oficial)
         const templateParts = [];
         templateParts.push(`id:${dataId}`);
-        if (requestId) { // Inclui request-id apenas se ele foi enviado no header
-             templateParts.push(`request-id:${requestId}`);
-        }
+        if (requestId) { templateParts.push(`request-id:${requestId}`); }
         templateParts.push(`ts:${timestamp}`);
-        const template = templateParts.join(';'); // Junta com ponto e vírgula
-
-        console.log("Webhook Verify MP - Segredo Usado (parcial):", webhookSecret.substring(0, 5) + "..."); // Apenas para debug leve
+        const template = templateParts.join(';');
         console.log("Webhook Verify MP - Base String Usada:", template);
 
-        // 6. Calcular Assinatura Esperada (HMAC-SHA256 sobre o TEMPLATE)
+        // 6. Calcular Assinatura Esperada
+        // O segredo JÁ FOI VALIDADO como string acima
         const hmac = crypto.createHmac('sha256', webhookSecret);
         const calculatedSignature = hmac.update(template).digest('hex');
         console.log("Webhook Verify MP - Assinatura Calculada:", calculatedSignature);
         console.log("Webhook Verify MP - Assinatura Recebida :", receivedSignature);
 
-        // 7. Comparar Assinaturas de Forma Segura
+        // 7. Comparar Assinaturas
         const receivedSigBuffer = Buffer.from(receivedSignature, 'hex');
         const calculatedSigBuffer = Buffer.from(calculatedSignature, 'hex');
 
-        // Verifica o tamanho antes da comparação segura
-        if (receivedSigBuffer.length !== calculatedSigBuffer.length) {
-             console.error("Webhook MP: Discrepância no tamanho das assinaturas.");
-             return { isValid: false, message: "Assinatura inválida (tamanho incorreto)." };
-        }
-
-        // Comparação segura contra ataques de temporização
-        if (!crypto.timingSafeEqual(receivedSigBuffer, calculatedSigBuffer)) {
+        if (receivedSigBuffer.length !== calculatedSigBuffer.length ||
+            !crypto.timingSafeEqual(receivedSigBuffer, calculatedSigBuffer))
+        {
             console.error("Webhook MP: Falha na comparação timingSafeEqual das assinaturas.");
-            return { isValid: false, message: "Assinatura inválida." };
+            return { isValid: false, message: "Assinatura inválida.", notificationPayload: null };
         }
 
-        // Se chegou aqui, a assinatura é válida!
-        return { isValid: true, message: "Assinatura verificada com sucesso." };
+        // 8. Parsear o Corpo Raw para retornar o payload
+        let notificationPayload;
+        try {
+            notificationPayload = JSON.parse(rawBody.toString());
+        } catch (parseError) {
+            throw new Error('Corpo da requisição não é JSON válido, apesar da assinatura válida.');
+        }
+
+        return { isValid: true, message: "Assinatura verificada com sucesso.", notificationPayload: notificationPayload };
 
     } catch (error) {
-        // Captura erros de parsing ou outros erros inesperados durante a verificação
-        console.error("Webhook MP: Erro CRÍTICO durante a verificação da assinatura:", error);
-        return { isValid: false, message: `Erro ao processar assinatura: ${error.message}` };
+        console.error("Webhook MP: Erro durante a verificação da assinatura:", error);
+        return { isValid: false, message: `Erro ao processar assinatura: ${error.message}`, notificationPayload: null };
     }
 };
 
@@ -102,44 +105,59 @@ export const handleWebhook = async (req, res, next) => {
     console.log("---- INÍCIO: Processamento de Webhook Mercado Pago ----");
     let notificationPayload;
     let processingError = null;
-    let paymentId = req.query['data.id'] || req.body?.data?.id; // Tenta pegar ID para log de erro
+    // Tenta pegar ID da query para log inicial de erro, mas o ID real virá do payload validado
+    let initialPaymentIdLog = req.query['data.id'];
 
     try {
         // --- 1. VERIFICAÇÃO DE ASSINATURA ---
-        const webhookSecret = process.env.MP_WEBHOOK_SECRET;
-        if (!webhookSecret) {
-             console.warn("Webhook MP: MP_WEBHOOK_SECRET não definido. Processando sem verificação (INSEGURO!).");
-             // Parseia o corpo, assumindo que pode ser JSON ou RAW
-             if (Buffer.isBuffer(req.body)) {
-                notificationPayload = JSON.parse(req.body.toString());
-             } else if (typeof req.body === 'object' && req.body !== null) {
-                 notificationPayload = req.body;
-             } else {
-                 throw new Error('Formato de corpo inesperado ao processar sem segredo.');
-             }
-        } else {
-            // Realiza a verificação (req.body DEVE ser um Buffer aqui devido ao express.raw)
-             if (!Buffer.isBuffer(req.body)) {
-                 console.error("Webhook MP: Verificação de assinatura esperava Buffer, mas recebeu:", typeof req.body);
-                 return res.status(400).send("Webhook Error: Invalid body type for signature check. Ensure 'express.raw' middleware is used correctly.");
-             }
-             const verificationResult = verifyMercadoPagoSignature(req, req.body, webhookSecret);
+        const webhookSecret = process.env.MP_WEBHOOK_SECRET; // Pega do .env
 
-             if (!verificationResult.isValid) {
-                 console.error(`Webhook MP: Falha na verificação - ${verificationResult.message}`);
-                 return res.status(400).send(`Webhook Error: ${verificationResult.message}`);
-             }
-             console.log(`Webhook MP: ${verificationResult.message}`);
-             notificationPayload = verificationResult.notificationPayload; // Pega o payload já parseado
+        // Só tenta verificar se o segredo estiver configurado
+        if (webhookSecret) {
+            // Passa req e o corpo (esperado como Buffer)
+            // Nota: A validação do tipo de req.body é feita dentro de verifyMercadoPagoSignature agora
+            const verificationResult = verifyMercadoPagoSignature(req, req.body, webhookSecret);
+
+            if (!verificationResult.isValid) {
+                // Se a assinatura falhar, retorna 400 Bad Request
+                console.error(`Webhook MP: Falha na verificação - ${verificationResult.message}`);
+                return res.status(400).send(`Webhook Error: ${verificationResult.message}`);
+            }
+            // Se passou, pega o payload parseado retornado pela função de verificação
+            console.log(`Webhook MP: ${verificationResult.message}`);
+            notificationPayload = verificationResult.notificationPayload;
+
+        } else {
+            // Processa sem verificação (INSEGURO - AVISO)
+            console.warn("Webhook MP: MP_WEBHOOK_SECRET não definido. Processando sem verificação (INSEGURO!).");
+            // Tenta parsear o corpo assumindo que pode ser JSON ou RAW Buffer
+            try {
+                if (Buffer.isBuffer(req.body)) {
+                    notificationPayload = JSON.parse(req.body.toString());
+                } else if (typeof req.body === 'object' && req.body !== null) {
+                     notificationPayload = req.body; // Assume que express.json já parseou
+                } else {
+                    throw new Error('Formato de corpo inesperado ao processar sem segredo.');
+                }
+            } catch (e) {
+                 console.error("Webhook MP: Erro ao parsear corpo (sem verificação):", e);
+                 return res.status(400).send('Invalid request body.');
+            }
         }
         // --- FIM DA VERIFICAÇÃO/PARSING ---
 
+
         // --- 2. Processamento do Evento ---
-        if (!notificationPayload) { throw new Error("Falha crítica ao obter payload da notificação."); }
+        if (!notificationPayload) {
+            // Se chegou aqui, algo deu errado no parsing mesmo sem erro lançado
+            throw new Error("Falha crítica ao obter payload da notificação após verificação/parsing.");
+        }
         console.log("Webhook MP: Payload a ser processado:", JSON.stringify(notificationPayload, null, 2));
 
+        // Extrair dados relevantes do PAYLOAD JSON (não mais da query)
         const eventType = notificationPayload?.type;
-        paymentId = notificationPayload?.data?.id; // Atualiza paymentId com o valor do corpo
+        const paymentId = notificationPayload?.data?.id; // ID do pagamento DO CORPO JSON
+        initialPaymentIdLog = paymentId; // Atualiza para o log de erro final
 
         if (eventType !== 'payment' || !paymentId) {
             console.log(`Webhook MP: Evento ignorado (Tipo: ${eventType}, ID Dados: ${paymentId || 'N/A'}).`);
@@ -155,32 +173,31 @@ export const handleWebhook = async (req, res, next) => {
         console.log(`Webhook MP: Detalhes do pagamento ${paymentId} obtidos. Status API MP: ${paymentDetails?.status}`);
         const finalPaymentStatus = paymentDetails?.status;
         const externalReference = paymentDetails?.external_reference; // Nosso Order ID
-        if (!finalPaymentStatus || !externalReference) { throw new AppError('Resposta inválida do MP ao buscar pagamento.', 502); }
+        if (!finalPaymentStatus || !externalReference) { throw new AppError('Resposta inválida do MP ao buscar pagamento (sem status ou ref externa).', 502); }
 
         // 4. Encontrar Pedido Correspondente
         const order = await Order.findById(externalReference);
         if (!order) {
             console.warn(`Webhook MP: Pedido não encontrado para external_reference (orderId): ${externalReference}.`);
-            return res.status(200).json({ received: true, message: 'Order not found.' });
+            return res.status(200).json({ received: true, message: 'Order not found for this payment.' });
         }
         console.log(`Webhook MP: Pedido ${order._id} encontrado. Status atual: ${order.orderStatus}.`);
 
         // 5. Atualizar Status do Pedido
         if (order.orderStatus === 'pending_payment') {
-            let newStatus = order.orderStatus; // Inicia com o status atual
+            let newStatus = null; // Inicia como null para saber se houve mudança
             let shouldUpdatePaymentResult = false;
 
             if (finalPaymentStatus === 'approved') {
-                newStatus = 'processing'; // Muda para processando
+                newStatus = 'processing';
                 order.paidAt = new Date();
                 shouldUpdatePaymentResult = true;
             } else if (['rejected', 'cancelled', 'refunded', 'charged_back', 'failed'].includes(finalPaymentStatus)) {
-                newStatus = 'failed'; // Marca como falho
+                newStatus = 'failed';
                 shouldUpdatePaymentResult = true;
             }
 
-            // Salva apenas se o status realmente mudou
-            if (newStatus !== order.orderStatus) {
+            if (newStatus) { // Só atualiza se newStatus foi definido
                 order.orderStatus = newStatus;
                 if (shouldUpdatePaymentResult) {
                     order.paymentResult = {
@@ -205,7 +222,7 @@ export const handleWebhook = async (req, res, next) => {
         res.status(200).json({ received: true });
 
     } catch(err) {
-         console.error(`Webhook MP: Erro GERAL ao processar notificação (Payment ID: ${paymentId || 'N/A'}):`, err);
+         console.error(`Webhook MP: Erro GERAL ao processar notificação (Payment ID: ${initialPaymentIdLog || 'N/A'}):`, err);
          processingError = err; // Guarda erro para log, mas responde 200 OK
     }
 
@@ -215,7 +232,6 @@ export const handleWebhook = async (req, res, next) => {
              console.error("Webhook MP: Erro interno ocorreu, respondendo 200 OK ao MP.");
              res.status(200).json({ received: true, processed: false, error: 'Internal processing error occurred.' });
         } else {
-             // Se chegou aqui sem erro E sem resposta enviada
              res.status(200).json({ received: true });
         }
     }

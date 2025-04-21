@@ -1,3 +1,4 @@
+//src/app.js
 import express from 'express';
 import dotenv from 'dotenv';
 import { connectDB } from './config/db.js';
@@ -22,6 +23,7 @@ dotenv.config();
 
 // Declaração de Constantes
 const app = express();
+app.set('trust proxy', 1);
 
 // --- Configuração do Swagger/OpenAPI ---
 const options = {
@@ -431,7 +433,7 @@ app.use('/api/', apiLimiter);
 app.use('/api/webhooks', webhookRoutes); 
 
 // Body parsers globais
-app.use(express.json({ limit: '10kb' }));
+app.use(express.json({ limit: '20kb' }));
 
 // Rotas
 app.use('/api/auth', authRoutes);
