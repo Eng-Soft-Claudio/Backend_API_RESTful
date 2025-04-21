@@ -103,6 +103,7 @@ const verifyMercadoPagoSignature = (req, rawBody, webhookSecret) => {
  */
 export const handleWebhook = async (req, res, next) => {
     console.log("---- INÍCIO: Processamento de Webhook Mercado Pago ----");
+    console.log("Webhook Handler - Query Params:", req.query);
     let notificationPayload;
     let processingError = null;
     // Tenta pegar ID da query para log inicial de erro, mas o ID real virá do payload validado
@@ -184,37 +185,62 @@ export const handleWebhook = async (req, res, next) => {
         console.log(`Webhook MP: Pedido ${order._id} encontrado. Status atual: ${order.orderStatus}.`);
 
         // 5. Atualizar Status do Pedido
-        if (order.orderStatus === 'pending_payment') {
-            let newStatus = null; // Inicia como null para saber se houve mudança
-            let shouldUpdatePaymentResult = false;
+        if (['pending_payment', 'processing', 'paid'].includes(order.orderStatus)) { 
+            let newStatus = order.orderStatus;
+            let shouldUpdatePaymentResult = true; 
+            let updatePaidAt = false;
 
+            // Mapeamento de Status MP -> Status Pedido
             if (finalPaymentStatus === 'approved') {
-                newStatus = 'processing';
-                order.paidAt = new Date();
-                shouldUpdatePaymentResult = true;
+                // Só atualiza se estava pendente antes
+                if (order.orderStatus === 'pending_payment') {
+                    newStatus = 'processing'; 
+                    order.paidAt = new Date(); 
+                } else {
+                    // Se já estava processing/paid, não muda o status, mas pode atualizar paymentResult
+                    shouldUpdatePaymentResult = true; 
+                    console.log(`Webhook MP: Recebido 'approved' para pedido ${order._id} que já estava ${order.orderStatus}. Atualizando apenas paymentResult.`);
+                }
             } else if (['rejected', 'cancelled', 'refunded', 'charged_back', 'failed'].includes(finalPaymentStatus)) {
-                newStatus = 'failed';
+                 // Se falhou/cancelou/reembolsou, marca como 'failed' ou 'cancelled'
+                 // (mesmo que já estivesse 'processing' ou 'paid' no caso de chargeback/refund)
+                newStatus = finalPaymentStatus === 'refunded' ? 'refunded' : (finalPaymentStatus === 'cancelled' ? 'cancelled' : 'failed');
                 shouldUpdatePaymentResult = true;
+                // TODO: Retornar estoque se 'failed', 'cancelled', 'refunded', 'charged_back'?
+            } else if (['pending', 'in_process', 'authorized'].includes(finalPaymentStatus)) {
+                 // Status intermediários do MP não alteram nosso status 'pending_payment'
+                 shouldUpdatePaymentResult = true; 
+                 console.log(`Webhook MP: Status MP intermediário (${finalPaymentStatus}) recebido para pedido ${order._id}. Mantendo status local.`);
+            } else {
+                 // Status desconhecido do MP
+                 shouldUpdatePaymentResult = false; 
+                 console.warn(`Webhook MP: Status MP desconhecido (${finalPaymentStatus}) recebido para pedido ${order._id}.`);
             }
 
-            if (newStatus) { // Só atualiza se newStatus foi definido
-                order.orderStatus = newStatus;
-                if (shouldUpdatePaymentResult) {
-                    order.paymentResult = {
-                        id: paymentId.toString(),
-                        status: finalPaymentStatus,
-                        update_time: paymentDetails?.date_last_updated || new Date().toISOString(),
-                        email_address: paymentDetails?.payer?.email || null
-                    };
-                }
-                await order.save();
-                console.log(`Webhook MP: Status do Pedido ${order._id} atualizado para ${newStatus}.`);
-                // TODO: Adicionar lógica pós-pagamento (email, etc.)
+            // Atualiza o pedido se necessário
+            if (newStatus !== order.orderStatus || shouldUpdatePaymentResult) { 
+                 if (newStatus !== order.orderStatus) {
+                    order.orderStatus = newStatus;
+                 }
+                 // Sempre atualiza paymentResult se shouldUpdatePaymentResult for true
+                 if (shouldUpdatePaymentResult) {
+                     order.paymentResult = {
+                         id: paymentId.toString(),
+                         status: finalPaymentStatus,
+                         update_time: paymentDetails?.date_last_updated || new Date().toISOString(),
+                         email_address: paymentDetails?.payer?.email || null,
+                         // Adiciona dados do cartão se disponíveis na resposta da API MP
+                         card_brand: paymentDetails?.payment_method_id, // ou paymentDetails?.card?.cardholder?.name?
+                         card_last_four: paymentDetails?.card?.last_four_digits
+                     };
+                 }
+                 await order.save();
+                 console.log(`Webhook MP: Pedido ${order._id} atualizado (Status: ${order.orderStatus}).`);
             } else {
-                console.log(`Webhook MP: Status MP (${finalPaymentStatus}) não necessitou atualização para pedido ${order._id}.`);
+                 console.log(`Webhook MP: Nenhuma atualização necessária para pedido ${order._id}.`);
             }
         } else {
-             console.log(`Webhook MP: Pedido ${order._id} já teve status atualizado (${order.orderStatus}), ignorando webhook.`);
+             console.log(`Webhook MP: Pedido ${order._id} não está em estado atualizável (${order.orderStatus}), ignorando webhook.`);
         }
 
         // 6. Responder 200 OK ao Mercado Pago

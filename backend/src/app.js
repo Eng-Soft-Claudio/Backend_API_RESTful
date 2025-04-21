@@ -15,6 +15,7 @@ import swaggerJSDoc from 'swagger-jsdoc';
 import { apiLimiter, corsOptions } from './config/security.js';
 import cors from 'cors';
 import globalErrorHandler from './middleware/errorHandler.js';
+import configRoutes from './routes/configRoutes.js';
 
 // .env
 dotenv.config();
@@ -27,174 +28,174 @@ app.set('trust proxy', 1);
 
 // --- Configuração do Swagger/OpenAPI ---
 const options = {
-  definition: {
-    openapi: '3.0.0',
-    info: {
-      title: 'API de E-commerce',
-      version: '1.0.0',
-      description: 'API RESTful base para funcionalidades de e-commerce, incluindo autenticação, usuários, categorias e produtos.',
-      contact: { name: 'Cláudio de Lima Tosta', email: 'eng-soft-claudio@gmail.com' },
-    },
-    servers: [
-      {
-        url: `http://localhost:${process.env.PORT || 5000}`,
-        description: 'Servidor de Desenvolvimento'
-      },
-    ],
-    
-    // --- Componentes Reutilizáveis ---
-    components: {
-      // Schemas (Modelos de Dados)
-      schemas: {
-        // Usuários
-        UserInputRegister: { 
-          type: 'object',
-          required: ['name', 'email', 'password', 'passwordConfirm'],
-          properties: {
-            name: { type: 'string', example: 'João Silva' },
-            email: { type: 'string', format: 'email', example: 'joao.silva@email.com' },
-            password: { type: 'string', format: 'password', minLength: 8, example: 'senhaForte123' },
-            passwordConfirm: { type: 'string', format: 'password', example: 'senhaForte123' },
-          }
+    definition: {
+        openapi: '3.0.0',
+        info: {
+            title: 'API de E-commerce',
+            version: '1.0.0',
+            description: 'API RESTful base para funcionalidades de e-commerce, incluindo autenticação, usuários, categorias e produtos.',
+            contact: { name: 'Cláudio de Lima Tosta', email: 'eng-soft-claudio@gmail.com' },
         },
-        UserInputLogin: { 
-          type: 'object',
-          required: ['email', 'password'],
-          properties: {
-            email: { type: 'string', format: 'email', example: 'joao.silva@email.com' },
-            password: { type: 'string', format: 'password', example: 'senhaForte123' },
-          }
-        },
-        UserInputUpdateMe: { 
-        type: 'object',
-        properties: {
-            name: { type: 'string', example: 'João da Silva Sauro' },
-            email: { type: 'string', format: 'email', example: 'joao.sauro@email.com' },
-        }
-        },
-        UserUpdatePasswordInput: { 
+        servers: [
+            {
+                url: `http://localhost:${process.env.PORT || 5000}`,
+                description: 'Servidor de Desenvolvimento'
+            },
+        ],
+        
+        // --- Componentes Reutilizáveis ---
+        components: {
+        // Schemas (Modelos de Dados)
+        schemas: {
+            // Usuários
+            UserInputRegister: { 
             type: 'object',
-            required: ['currentPassword', 'password', 'passwordConfirm'],
+            required: ['name', 'email', 'password', 'passwordConfirm'],
             properties: {
-                currentPassword: { type: 'string', format: 'password', example: 'senhaAntiga123' },
-                password: { type: 'string', format: 'password', minLength: 8, example: 'novaSenhaForte456' },
-                passwordConfirm: { type: 'string', format: 'password', example: 'novaSenhaForte456' },
+                name: { type: 'string', example: 'João Silva' },
+                email: { type: 'string', format: 'email', example: 'joao.silva@email.com' },
+                password: { type: 'string', format: 'password', minLength: 8, example: 'senhaForte123' },
+                passwordConfirm: { type: 'string', format: 'password', example: 'senhaForte123' },
             }
-        },
-        UserOutput: { 
-          type: 'object',
-          properties: {
-            _id: { type: 'string', format: 'objectid', example: '68015a91320b9fa9419079be' },
-            name: { type: 'string', example: 'João Silva' },
-            email: { type: 'string', format: 'email', example: 'joao.silva@email.com' },
-            role: { type: 'string', enum: ['user', 'admin'], example: 'user' },
-            createdAt: { type: 'string', format: 'date-time' },
-            updatedAt: { type: 'string', format: 'date-time' },
-          }
-        },
-        // Categorias
-        CategoryInput: {
+            },
+            UserInputLogin: { 
             type: 'object',
-            required: ['name'],
+            required: ['email', 'password'],
             properties: {
-                 name: { type: 'string', example: 'Eletrônicos' },
-                 description: { type: 'string', example: 'Dispositivos eletrônicos e acessórios' },
+                email: { type: 'string', format: 'email', example: 'joao.silva@email.com' },
+                password: { type: 'string', format: 'password', example: 'senhaForte123' },
             }
-        },
-        CategoryOutput: {
-            type: 'object',
-             properties: {
-                _id: { type: 'string', format: 'objectid', example: '6801350d65d4d9e110605dbaf' },
-                 name: { type: 'string', example: 'Eletrônicos' },
-                 slug: { type: 'string', example: 'eletronicos' },
-                 description: { type: 'string', example: 'Dispositivos eletrônicos e acessórios' },
-                 createdAt: { type: 'string', format: 'date-time' },
-                 updatedAt: { type: 'string', format: 'date-time' },
-            }
-        },
-        // Produtos
-        ProductInput: {
-            type: 'object',
-            required: ['name', 'price', 'category', 'image'], 
-            properties: {
-                 name: { type: 'string', example: 'Laptop XPTO Pro' },
-                 description: { type: 'string', example: 'Laptop de alta performance.' },
-                 price: { type: 'number', format: 'float', minimum: 0.01, example: 1599.99 },
-                 category: { type: 'string', format: 'objectid', description: 'ID da Categoria', example: '6801350d65d4d9e110605dbaf' },
-                 stock: { type: 'integer', minimum: 0, example: 50 },
-                 image: { type: 'string', format: 'binary', description: '(Via form-data) Arquivo de imagem do produto.' }, 
-            }
-        },
-        ProductUpdateInput: { 
+            },
+            UserInputUpdateMe: { 
             type: 'object',
             properties: {
-                 name: { type: 'string', example: 'Laptop XPTO Pro Max' },
-                 description: { type: 'string', example: 'Laptop de alta performance atualizado.' },
-                 price: { type: 'number', format: 'float', minimum: 0.01, example: 1699.99 },
-                 category: { type: 'string', format: 'objectid', description: 'ID da Categoria', example: '6801350d65d4d9e110605dbaf' },
-                 stock: { type: 'integer', minimum: 0, example: 45 },
-                 image: { type: 'string', format: 'binary', description: '(Via form-data) Nova imagem (opcional).' },
+                name: { type: 'string', example: 'João da Silva Sauro' },
+                email: { type: 'string', format: 'email', example: 'joao.sauro@email.com' },
             }
-        },
-        ProductOutput: {
+            },
+            UserUpdatePasswordInput: { 
+                type: 'object',
+                required: ['currentPassword', 'password', 'passwordConfirm'],
+                properties: {
+                    currentPassword: { type: 'string', format: 'password', example: 'senhaAntiga123' },
+                    password: { type: 'string', format: 'password', minLength: 8, example: 'novaSenhaForte456' },
+                    passwordConfirm: { type: 'string', format: 'password', example: 'novaSenhaForte456' },
+                }
+            },
+            UserOutput: { 
             type: 'object',
-             properties: {
-                _id: { type: 'string', format: 'objectid', example: '6801a...' },
-                 name: { type: 'string', example: 'Laptop XPTO Pro' },
-                 description: { type: 'string', example: 'Laptop de alta performance.' },
-                 price: { type: 'number', format: 'float', example: 1599.99 },
-                 category: { $ref: '#/components/schemas/CategoryOutput' }, 
-                 stock: { type: 'integer', example: 50 },
-                 image: { type: 'string', format: 'url', example: 'https://res.cloudinary.com/...' },
-                 imagePublicId: { type: 'string', example: 'ecommerce/products/...' },
-                 createdAt: { type: 'string', format: 'date-time' },
-                 updatedAt: { type: 'string', format: 'date-time' },
+            properties: {
+                _id: { type: 'string', format: 'objectid', example: '68015a91320b9fa9419079be' },
+                name: { type: 'string', example: 'João Silva' },
+                email: { type: 'string', format: 'email', example: 'joao.silva@email.com' },
+                role: { type: 'string', enum: ['user', 'admin'], example: 'user' },
+                createdAt: { type: 'string', format: 'date-time' },
+                updatedAt: { type: 'string', format: 'date-time' },
             }
-        },
-        // Respostas Genéricas
-        AuthResponse: { 
-          type: 'object',
-          properties: {
-            status: { type: 'string', example: 'success' },
-            token: { type: 'string', example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' },
-            data: {
-              type: 'object',
-              properties: { user: { $ref: '#/components/schemas/UserOutput' } }
-            }
-          }
-        },
-        SuccessResponse: { 
+            },
+            // Categorias
+            CategoryInput: {
+                type: 'object',
+                required: ['name'],
+                properties: {
+                    name: { type: 'string', example: 'Eletrônicos' },
+                    description: { type: 'string', example: 'Dispositivos eletrônicos e acessórios' },
+                }
+            },
+            CategoryOutput: {
+                type: 'object',
+                properties: {
+                    _id: { type: 'string', format: 'objectid', example: '6801350d65d4d9e110605dbaf' },
+                    name: { type: 'string', example: 'Eletrônicos' },
+                    slug: { type: 'string', example: 'eletronicos' },
+                    description: { type: 'string', example: 'Dispositivos eletrônicos e acessórios' },
+                    createdAt: { type: 'string', format: 'date-time' },
+                    updatedAt: { type: 'string', format: 'date-time' },
+                }
+            },
+            // Produtos
+            ProductInput: {
+                type: 'object',
+                required: ['name', 'price', 'category', 'image'], 
+                properties: {
+                    name: { type: 'string', example: 'Laptop XPTO Pro' },
+                    description: { type: 'string', example: 'Laptop de alta performance.' },
+                    price: { type: 'number', format: 'float', minimum: 0.01, example: 1599.99 },
+                    category: { type: 'string', format: 'objectid', description: 'ID da Categoria', example: '6801350d65d4d9e110605dbaf' },
+                    stock: { type: 'integer', minimum: 0, example: 50 },
+                    image: { type: 'string', format: 'binary', description: '(Via form-data) Arquivo de imagem do produto.' }, 
+                }
+            },
+            ProductUpdateInput: { 
+                type: 'object',
+                properties: {
+                    name: { type: 'string', example: 'Laptop XPTO Pro Max' },
+                    description: { type: 'string', example: 'Laptop de alta performance atualizado.' },
+                    price: { type: 'number', format: 'float', minimum: 0.01, example: 1699.99 },
+                    category: { type: 'string', format: 'objectid', description: 'ID da Categoria', example: '6801350d65d4d9e110605dbaf' },
+                    stock: { type: 'integer', minimum: 0, example: 45 },
+                    image: { type: 'string', format: 'binary', description: '(Via form-data) Nova imagem (opcional).' },
+                }
+            },
+            ProductOutput: {
+                type: 'object',
+                properties: {
+                    _id: { type: 'string', format: 'objectid', example: '6801a...' },
+                    name: { type: 'string', example: 'Laptop XPTO Pro' },
+                    description: { type: 'string', example: 'Laptop de alta performance.' },
+                    price: { type: 'number', format: 'float', example: 1599.99 },
+                    category: { $ref: '#/components/schemas/CategoryOutput' }, 
+                    stock: { type: 'integer', example: 50 },
+                    image: { type: 'string', format: 'url', example: 'https://res.cloudinary.com/...' },
+                    imagePublicId: { type: 'string', example: 'ecommerce/products/...' },
+                    createdAt: { type: 'string', format: 'date-time' },
+                    updatedAt: { type: 'string', format: 'date-time' },
+                }
+            },
+            // Respostas Genéricas
+            AuthResponse: { 
             type: 'object',
             properties: {
                 status: { type: 'string', example: 'success' },
-                message: { type: 'string', example: 'Operação realizada com sucesso.' },
+                token: { type: 'string', example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' },
+                data: {
+                type: 'object',
+                properties: { user: { $ref: '#/components/schemas/UserOutput' } }
+                }
             }
-        },
-        ErrorValidationResponse: { 
-             type: 'object',
-               properties: {
-                 errors: {
-                    type: 'array',
-                    items: { type: 'object' }
-                 }
-             }
-        },
-        ErrorResponse: { 
-           type: 'object',
-           properties: {
-             status: { type: 'string', example: 'fail' },
-             message: { type: 'string', example: 'Mensagem de erro descritiva.' },
-           }
-        },
-        WebhookResponse: { 
+            },
+            SuccessResponse: { 
+                type: 'object',
+                properties: {
+                    status: { type: 'string', example: 'success' },
+                    message: { type: 'string', example: 'Operação realizada com sucesso.' },
+                }
+            },
+            ErrorValidationResponse: { 
+                type: 'object',
+                properties: {
+                    errors: {
+                        type: 'array',
+                        items: { type: 'object' }
+                    }
+                }
+            },
+            ErrorResponse: { 
             type: 'object',
             properties: {
-                received: { type: 'boolean', example: true },
-                message: { type: 'string', example: 'Event processed.' , nullable: true }
+                status: { type: 'string', example: 'fail' },
+                message: { type: 'string', example: 'Mensagem de erro descritiva.' },
             }
+            },
+            WebhookResponse: { 
+                type: 'object',
+                properties: {
+                    received: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Event processed.' , nullable: true }
+                }
+            },
         },
-      },
-      // Esquemas de Segurança
+        // Esquemas de Segurança
         securitySchemes: {
             bearerAuth: { 
             type: 'http',
@@ -361,7 +362,9 @@ const options = {
             id: { type: 'string', description: 'ID da transação no gateway.', example: 'pi_123...' },
             status: { type: 'string', description: 'Status do pagamento no gateway.', example: 'succeeded' },
             update_time: { type: 'string', description: 'Timestamp da atualização do pagamento.', example: '2023-10-27T10:00:00Z' },
-            email_address: { type: 'string', format: 'email', description: 'Email do pagador (se fornecido pelo gateway).', example: 'pagador@email.com' }
+            email_address: { type: 'string', format: 'email', description: 'Email do pagador (se fornecido pelo gateway).', example: 'pagador@email.com' },
+            card_brand: { type: 'string', nullable: true, description: 'Bandeira do cartão ou método (ex: visa, master, pix)', example: 'visa' },
+            card_last_four: { type: 'string', nullable: true, description: 'Últimos 4 dígitos do cartão (se aplicável)', example: '1234'}
         }
         },
         OrderOutput: { 
@@ -389,10 +392,11 @@ const options = {
             },
             itemsPrice: { type: 'number', format: 'float', example: 1649.99 },
             shippingPrice: { type: 'number', format: 'float', example: 10.00 },
+            installments: { type: 'integer', description: 'Número de parcelas.', example: 1, default: 1 },
             totalPrice: { type: 'number', format: 'float', example: 1659.99 },
             orderStatus: {
                 type: 'string',
-                enum: ['pending_payment', 'failed', 'processing', 'shipped', 'delivered', 'cancelled'],
+                enum: ['pending_payment', 'failed', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'],
                 example: 'processing'
             },
             paidAt: { type: 'string', format: 'date-time', nullable: true },
@@ -401,26 +405,53 @@ const options = {
             updatedAt: { type: 'string', format: 'date-time' },
         }
         },
-        // Esquema de pagamento via PIX
-        OrderPaymentResponse: {
-        type: 'object',
-        description: 'Resposta ao iniciar um pagamento PIX via Mercado Pago.',
-        properties: {
-            status: { type: 'string', example: 'success' },
-            message: { type: 'string', example: 'Pagamento PIX iniciado. Use os dados abaixo para pagar.' },
-            data: {
-                type: 'object',
-                properties: {
-                    orderId: { type: 'string', format: 'objectid', description: 'ID do pedido associado.', example: '6a02c...'},
-                    mercadopagoPaymentId: { type: 'string', description: 'ID do pagamento no Mercado Pago.', example: '123456789'},
-                    qrCodeBase64: { type: 'string', format: 'byte', description: 'String Base64 da imagem do QR Code PIX.' },
-                    qrCode: { type: 'string', description: 'Código PIX Copia e Cola.' }
+        OrderPaymentInput: {
+            type: 'object',
+            description: 'Dados necessários para processar o pagamento via API MP, geralmente obtidos do SDK JS V2.',
+            required: ['token', 'payment_method_id', 'installments', 'payer'],
+            properties: {
+                token: {
+                    type: 'string',
+                    description: "Card Token (gerado pelo SDK JS para cartões) ou identificador similar para outros métodos.",
+                    example: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                },
+                payment_method_id: {
+                    type: 'string',
+                    description: "ID do método de pagamento escolhido no frontend (ex: 'visa', 'master', 'pix', 'bolbradesco').",
+                    example: "visa"
+                },
+                issuer_id: {
+                    type: 'string',
+                    description: "ID do banco emissor (geralmente necessário para cartões de débito/crédito, obtido do SDK JS).",
+                    example: "24"
+                },
+                installments: {
+                    type: 'integer',
+                    description: 'Número de parcelas escolhido pelo usuário (mínimo 1).',
+                    example: 1,
+                    minimum: 1
+                },
+                payer: {
+                    type: 'object',
+                    description: 'Informações do pagador (alguns campos podem ser obrigatórios pelo MP).',
+                    required: ['email'],
+                    properties: {
+                        email: { type: 'string', format: 'email', description: 'Email do pagador (obrigatório).', example: 'comprador@email.com' },
+                        identification: {
+                            type: 'object',
+                            description: 'Identificação (CPF/CNPJ) do pagador (obrigatório para alguns métodos/países).',
+                            properties: {
+                                type: {type: 'string', description:"Tipo de documento ('CPF' ou 'CNPJ').", example: 'CPF'},
+                                number: {type: 'string', description:"Número do documento.", example: '12345678900'}
+                            }
+                        }
+                        // Poderia adicionar first_name, last_name se necessário/coletado
+                    }
                 }
             }
-        }
         },
 
-}, 
+    }, 
 apis: ['./routes/*.js'],
 };
 
@@ -432,10 +463,13 @@ app.use('/api/', apiLimiter);
 // Rota do Webhook
 app.use('/api/webhooks', webhookRoutes); 
 
+// --- ROTA DE CONFIGURAÇÃO ---
+app.use('/api/config', configRoutes);
+
 // Body parsers globais
 app.use(express.json({ limit: '20kb' }));
 
-// Rotas
+// Rotas da API
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/products', productRoutes);

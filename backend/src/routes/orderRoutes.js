@@ -1,15 +1,12 @@
 //src/routes/orderRoutes.js
 import express from 'express';
 import { body, param } from 'express-validator';
-import { authenticate } from '../middleware/auth.js'; // Autenticação sempre necessária
-// Importar isAdmin se/quando criarmos rotas de admin para pedidos
-// import { isAdmin } from '../middleware/auth.js';
+import { authenticate } from '../middleware/auth.js'; 
 import {
     createOrder,
     getMyOrders,
     getOrderById,
-    createOrderPayment
-    // Importar outras funções do controller quando forem criadas
+    payOrder
 } from '../controllers/orderController.js';
 import Address from '../models/Address.js'; 
 
@@ -39,6 +36,16 @@ const orderIdParamValidation = [
     param('id', 'ID do pedido inválido na URL').isMongoId()
 ];
 
+// Validação para pagar pedido
+const payOrderValidationRules = [
+    body('token', 'Token de pagamento é obrigatório').trim().notEmpty(), 
+    body('payment_method_id', 'ID do método de pagamento é obrigatório').trim().notEmpty(), 
+    body('installments', 'Número de parcelas é obrigatório').isInt({ min: 1 }).toInt(),
+    body('payer', 'Informações do pagador são obrigatórias').isObject(),
+    body('payer.email', 'Email do pagador é obrigatório').isEmail().normalizeEmail(),
+    body('issuer_id', 'ID do emissor (banco) é opcional').optional().trim() 
+];
+
 
 // --- Definição das Rotas ---
 
@@ -53,33 +60,24 @@ const orderIdParamValidation = [
  * @swagger
  * /api/orders:
  *   post:
- *     summary: Cria um novo pedido a partir do carrinho do usuário logado.
+ *     summary: Cria um novo pedido inicial (status pending_payment).
  *     tags: [Orders]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
  *       required: true
- *       description: ID do endereço de entrega e método de pagamento. O carrinho atual do usuário será usado para os itens.
+ *       description: ID do endereço e método de pagamento inicial.
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - shippingAddressId
- *               - paymentMethod
+ *             required: [shippingAddressId, paymentMethod]
  *             properties:
- *               shippingAddressId:
- *                 type: string
- *                 format: objectid
- *                 description: ID de um endereço válido pertencente ao usuário.
- *                 example: '6701a...'
- *               paymentMethod:
- *                 type: string
- *                 description: Método de pagamento escolhido (ex: 'Cartão de Crédito', 'PIX').
- *                 example: 'PIX'
+ *               shippingAddressId: { type: string, format: objectid }
+ *               paymentMethod: { type: string, example: 'Cartão de Crédito' } # Ou PIX, Boleto...
  *     responses:
  *       '201':
- *         description: Pedido criado com sucesso. Retorna os detalhes do pedido.
+ *         description: Pedido criado com sucesso (status pending_payment).
  *         content:
  *           application/json:
  *             schema:
@@ -89,20 +87,12 @@ const orderIdParamValidation = [
  *                 data:
  *                   type: object
  *                   properties:
- *                     order: { $ref: '#/components/schemas/OrderOutput' } # Definir OrderOutput depois
- *       '400':
- *         description: Erro de validação (endereço inválido, carrinho vazio, estoque insuficiente).
- *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } # Ou ErrorValidationResponse
- *       '401':
- *         description: Não autorizado.
- *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
- *       '500':
- *         description: Erro interno (ex: falha na transação).
- *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+ *                     order: { $ref: '#/components/schemas/OrderOutput' } // << REFERENCIA OrderOutput
+ *       # ... (outras respostas 4xx, 5xx) ...
  */
 router.post(
     '/',
-    createOrderValidationRules, 
+    createOrderValidationRules,
     createOrder
 );
 
@@ -123,77 +113,70 @@ router.post(
  *               type: object
  *               properties:
  *                 status: { type: string, example: success }
- *                 results: { type: integer, example: 3 }
+ *                 results: { type: integer }
  *                 data:
  *                   type: object
  *                   properties:
  *                     orders:
  *                       type: array
  *                       items:
- *                         $ref: '#/components/schemas/OrderOutput' # Definir OrderOutput depois
- *       '401':
- *         description: Não autorizado.
- *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
- *       '500':
- *         description: Erro interno.
- *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+ *                         $ref: '#/components/schemas/OrderOutput' // << REFERENCIA OrderOutput
+ *       # ... (outras respostas 4xx, 5xx) ...
  */
 router.get(
-    '/my', 
+    '/my',
     getMyOrders
 );
 
 /**
  * @swagger
- * /api/orders/{id}/create-payment:
+ * /api/orders/{id}/pay:
  *   post:
- *     summary: Inicia um pagamento PIX para um pedido existente.
+ *     summary: Processa o pagamento de um pedido usando dados do SDK JS do MP.
  *     tags: [Orders]
- *     description: Cria uma solicitação de pagamento PIX junto ao Mercado Pago para um pedido que está com status 'pending_payment'. Retorna os dados necessários para exibir o QR Code e o código Copia e Cola.
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - name: id
  *         in: path
  *         required: true
- *         schema:
- *           type: string
- *           format: objectid
- *         description: ID do pedido para o qual iniciar o pagamento.
+ *         schema: { type: string, format: objectid }
+ *         description: ID do pedido a ser pago.
+ *     requestBody:
+ *       required: true
+ *       description: Dados do pagamento obtidos do SDK JS V2 (Card Token, etc.).
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/OrderPaymentInput' // << REFERENCIA OrderPaymentInput
  *     responses:
  *       '200':
- *         description: Dados PIX gerados com sucesso.
+ *         description: Pagamento processado (verificar status na resposta). Retorna o pedido atualizado.
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/OrderPaymentResponse' # Definir este schema
- *       '400':
- *         description: Erro (Pedido já pago, status inválido, erro ao gerar PIX no MP).
- *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
- *       '401':
- *         description: Não autorizado.
- *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
- *       '404':
- *         description: Pedido não encontrado ou não pertence ao usuário.
- *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
- *       '500':
- *         description: Erro interno do servidor.
- *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
- *       '502':
- *         description: Erro na comunicação com o Mercado Pago.
- *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+ *               type: object
+ *               properties:
+ *                  status: { type: string, example: success }
+ *                  message: { type: string, example: "Pagamento processado com status: approved"}
+ *                  data:
+ *                      type: object
+ *                      properties:
+ *                          order: { $ref: '#/components/schemas/OrderOutput' } // << REFERENCIA OrderOutput
+ *       # ... (outras respostas 4xx, 5xx) ...
  */
 router.post(
-    '/:id/create-payment',
-    orderIdParamValidation, 
-    createOrderPayment   
+    '/:id/pay',
+    orderIdParamValidation,
+    payOrderValidationRules,
+    payOrder
 );
 
 /**
  * @swagger
  * /api/orders/{id}:
  *   get:
- *     summary: Obtém detalhes de um pedido específico (próprio ou qualquer um se for admin).
+ *     summary: Obtém detalhes de um pedido específico.
  *     tags: [Orders]
  *     security:
  *       - bearerAuth: []
@@ -201,9 +184,7 @@ router.post(
  *       - name: id
  *         in: path
  *         required: true
- *         schema:
- *           type: string
- *           format: objectid
+ *         schema: { type: string, format: objectid }
  *         description: ID do pedido a ser obtido.
  *     responses:
  *       '200':
@@ -217,26 +198,13 @@ router.post(
  *                 data:
  *                   type: object
  *                   properties:
- *                     order: { $ref: '#/components/schemas/OrderOutput' } # Definir OrderOutput depois
- *       '400':
- *         description: ID inválido.
- *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorValidationResponse' } } }
- *       '401':
- *         description: Não autorizado.
- *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
- *       '404':
- *         description: Pedido não encontrado (ou não pertence ao usuário, se não for admin).
- *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
- *       '500':
- *         description: Erro interno.
- *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+ *                     order: { $ref: '#/components/schemas/OrderOutput' } // << REFERENCIA OrderOutput
+ *       # ... (outras respostas 4xx, 5xx) ...
  */
 router.get(
     '/:id',
-    orderIdParamValidation, 
+    orderIdParamValidation,
     getOrderById
 );
-
-// --- Rotas Futuras ---
 
 export default router;

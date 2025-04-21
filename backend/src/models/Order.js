@@ -66,7 +66,9 @@ const orderSchema = new mongoose.Schema({
         id: { type: String },           
         status: { type: String },       
         update_time: { type: String },  
-        email_address: { type: String } 
+        email_address: { type: String },
+        card_brand: { type: String },
+        card_last_four: { type: String }
     },
 
     itemsPrice: { 
@@ -79,6 +81,11 @@ const orderSchema = new mongoose.Schema({
         required: true,
         default: 0.0
     },
+    installments: {
+        type: Number,
+        required: true,
+        default: 1
+    },
     totalPrice: { 
         type: Number,
         required: true,
@@ -88,7 +95,7 @@ const orderSchema = new mongoose.Schema({
     orderStatus: {
         type: String,
         required: true,
-        enum: ['pending_payment', 'failed', 'processing', 'shipped', 'delivered', 'cancelled'],
+        enum: ['pending_payment', 'failed', 'processing', 'paid', 'shipped', 'delivered', 'cancelled', 'refunded'],
         default: 'pending_payment',
         index: true 
     },
