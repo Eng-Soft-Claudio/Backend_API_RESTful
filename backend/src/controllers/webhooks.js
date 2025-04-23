@@ -29,6 +29,9 @@ const verifyMercadoPagoSignature = (req, rawBody, webhookSecret) => {
     const signatureHeader = req.headers["x-signature"];
     const requestId = req.headers["x-request-id"];
 
+    console.log('signatureHeader: ', signatureHeader)
+    console.log('requestId: ', requestId)
+
     // 2. Validações iniciais
     if (!signatureHeader)
         return {
@@ -93,14 +96,19 @@ const verifyMercadoPagoSignature = (req, rawBody, webhookSecret) => {
         //const calculatedSignature = hmac.update(template).digest('hex');
         const hmac = crypto.createHmac(
             "sha256",
-            Buffer.from(webhookSecret, "utf-8")
+            Buffer.from(
+                webhookSecret,
+                "utf-8"
+            )
         );
-        const calculatedSignature = hmac.update(template, "utf-8").digest("hex");
+        const calculatedSignature = hmac.update(
+            template,
+            "utf-8"
+        ).digest(
+            "hex"
+        );
 
-        console.log(
-            "Webhook Verify MP - Assinatura Calculada:",
-            calculatedSignature
-        );
+        console.log("Webhook Verify MP - Assinatura Calculada: ", calculatedSignature);
         console.log("Webhook Verify MP - Assinatura Recebida :", receivedSignature);
 
         // 7. Comparar Assinaturas
@@ -176,63 +184,63 @@ export const handleWebhook = async (req, res, next) => {
         // !!! LEMBRE-SE DE REATIVAR A VALIDAÇÃO ANTES DA PRODUÇÃO !!!
 
         /* <<< BLOCO DE VERIFICAÇÃO (COMENTADO PARA PLANO B) >>> */
-        // if (webhookSecret) {
-        //     // Verifica se o corpo é Buffer (necessário para express.raw)
-        //      if (!Buffer.isBuffer(req.body)) {
-        //          console.error("Webhook MP: Verificação esperava Buffer, mas recebeu:", typeof req.body);
-        //          // Retorna erro pois a configuração do middleware está inconsistente com a necessidade da verificação
-        //          return res.status(400).send("Webhook Error: Invalid body type. Ensure 'express.raw' is used.");
-        //      }
-        //      // Chama a função que valida a assinatura
-        //     const verificationResult = verifyMercadoPagoSignature(req, req.body, webhookSecret);
+        if (webhookSecret) {
+            // Verifica se o corpo é Buffer (necessário para express.raw)
+            if (!Buffer.isBuffer(req.body)) {
+                console.error("Webhook MP: Verificação esperava Buffer, mas recebeu:", typeof req.body);
+                // Retorna erro pois a configuração do middleware está inconsistente com a necessidade da verificação
+                return res.status(400).send("Webhook Error: Invalid body type. Ensure 'express.raw' is used.");
+            }
+            // Chama a função que valida a assinatura
+            const verificationResult = verifyMercadoPagoSignature(req, req.body, webhookSecret);
 
-        //     if (!verificationResult.isValid) {
-        //         // Se a assinatura falhar, retorna 400 Bad Request
-        //         console.error(`Webhook MP: Falha na verificação - ${verificationResult.message}`);
-        //         return res.status(400).send(`Webhook Error: ${verificationResult.message}`);
-        //     }
-        //     // Se passou, pega o payload parseado retornado pela função de verificação
-        //     console.log(`Webhook MP: ${verificationResult.message}`);
-        //     notificationPayload = verificationResult.notificationPayload;
+            if (!verificationResult.isValid) {
+                // Se a assinatura falhar, retorna 400 Bad Request
+                console.error(`Webhook MP: Falha na verificação - ${verificationResult.message}`);
+                return res.status(400).send(`Webhook Error: ${verificationResult.message}`);
+            }
+            // Se passou, pega o payload parseado retornado pela função de verificação
+            console.log(`Webhook MP: ${verificationResult.message}`);
+            notificationPayload = verificationResult.notificationPayload;
 
-        // } else {
-        //      // Se o segredo não está configurado, avisa e continua sem validação (INSEGURO)
-        //     console.warn("Webhook MP: MP_WEBHOOK_SECRET não definido. Processando sem verificação (INSEGURO!).");
-        //     // Tenta parsear o corpo (que provavelmente veio como JSON)
-        //     try {
-        //         if (typeof req.body === 'object' && req.body !== null) {
-        //              notificationPayload = req.body;
-        //         } else {
-        //             // Tenta parsear como último recurso se não for objeto (ex: se express.raw ainda estiver ativo)
-        //             notificationPayload = JSON.parse(req.body.toString());
-        //         }
-        //     } catch (e) {
-        //          console.error("Webhook MP: Erro ao parsear corpo (sem secret):", e);
-        //          return res.status(400).send('Invalid request body.');
-        //     }
-        // }
+        } else {
+            // Se o segredo não está configurado, avisa e continua sem validação (INSEGURO)
+            console.warn("Webhook MP: MP_WEBHOOK_SECRET não definido. Processando sem verificação (INSEGURO!).");
+            // Tenta parsear o corpo (que provavelmente veio como JSON)
+            try {
+                if (typeof req.body === 'object' && req.body !== null) {
+                    notificationPayload = req.body;
+                } else {
+                    // Tenta parsear como último recurso se não for objeto (ex: se express.raw ainda estiver ativo)
+                    notificationPayload = JSON.parse(req.body.toString());
+                }
+            } catch (e) {
+                console.error("Webhook MP: Erro ao parsear corpo (sem secret):", e);
+                return res.status(400).send('Invalid request body.');
+            }
+        }
         /* <<< FIM BLOCO DE VERIFICAÇÃO (COMENTADO PARA PLANO B) >>> */
 
 
         // --- Bloco ATIVO para Plano B (Processa sem verificação) ---
-        console.error("!!! ALERTA DE SEGURANÇA: VERIFICAÇÃO DE ASSINATURA DO WEBHOOK DESATIVADA !!!");
-        try {
-            // Assume que express.json() global fez o parse (Remova/Comente express.raw na rota)
-            if (typeof req.body === 'object' && req.body !== null) {
-                notificationPayload = req.body;
-            } else {
-                 // Se por acaso ainda vier como Buffer, tenta parsear
-                 if (Buffer.isBuffer(req.body)) {
-                     console.log("Webhook MP (Plano B): Recebido Buffer, tentando parsear JSON.");
-                     notificationPayload = JSON.parse(req.body.toString());
-                 } else {
-                     throw new Error('Formato de corpo inesperado.');
-                 }
-            }
-        } catch (e) {
-             console.error("Webhook MP (Plano B): Erro ao obter/parsear corpo:", e);
-             return res.status(400).send('Invalid request body.');
-        }
+        // console.error("!!! ALERTA DE SEGURANÇA: VERIFICAÇÃO DE ASSINATURA DO WEBHOOK DESATIVADA !!!");
+        // try {
+        //     // Assume que express.json() global fez o parse (Remova/Comente express.raw na rota)
+        //     if (typeof req.body === 'object' && req.body !== null) {
+        //         notificationPayload = req.body;
+        //     } else {
+        //         // Se por acaso ainda vier como Buffer, tenta parsear
+        //         if (Buffer.isBuffer(req.body)) {
+        //             console.log("Webhook MP (Plano B): Recebido Buffer, tentando parsear JSON.");
+        //             notificationPayload = JSON.parse(req.body.toString());
+        //         } else {
+        //             throw new Error('Formato de corpo inesperado.');
+        //         }
+        //     }
+        // } catch (e) {
+        //     console.error("Webhook MP (Plano B): Erro ao obter/parsear corpo:", e);
+        //     return res.status(400).send('Invalid request body.');
+        // }
         // ===============================================================
         // ======================== FIM PLANO B ==========================
         // ===============================================================
