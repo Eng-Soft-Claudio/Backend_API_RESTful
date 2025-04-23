@@ -47,7 +47,13 @@ export const createOrder = async (req, res, next) => {
             if (product.stock < item.quantity) { stockErrors.push(/*...*/); }
             else {
                 itemsPrice += item.quantity * product.price;
-                orderItems.push({ /* ... dados do item ... */ });
+                orderItems.push({
+                    productId: product._id,
+                    name: product.name,
+                    quantity: item.quantity,
+                    price: product.price,
+                    image: product.image
+                });
             }
         }
 
@@ -59,7 +65,18 @@ export const createOrder = async (req, res, next) => {
         const orderData = {
             user: userId,
             orderItems,
-            shippingAddress: { /* ... copia endereço ... */ },
+            shippingAddress: {
+                label: shippingAddress?.label,
+                street: shippingAddress?.street,
+                number: shippingAddress?.number,
+                complement: shippingAddress?.complement,
+                neighborhood: shippingAddress?.neighborhood,
+                city: shippingAddress?.city,
+                state: shippingAddress?.state,
+                postalCode: shippingAddress?.postalCode,
+                country: shippingAddress?.country,
+                phone: shippingAddress?.phone
+            },
             paymentMethod,
             itemsPrice: parseFloat(itemsPrice.toFixed(2)),
             shippingPrice: parseFloat(shippingPrice.toFixed(2)),
@@ -122,19 +139,21 @@ export const payOrder = async (req, res, next) => {
         // Montar corpo para a API de Pagamentos V1 do MP
         const paymentData = {
             transaction_amount: order.totalPrice,
-            token: token, // O cardToken gerado pelo frontend SDK
+            token: token, 
             description: `Pedido #${order._id.toString().slice(-6)} - E-commerce`,
-            installments: installments, // Número de parcelas escolhido no frontend
-            payment_method_id: payment_method_id, // Ex: 'visa', 'master', 'pix', 'bolbradesco'
-            issuer_id: issuer_id, // Necessário para alguns cartões
-            payer: { // Informações do pagador (email é essencial, outras podem ser necessárias)
+            installments: installments, 
+            payment_method_id: payment_method_id, 
+            payer: { 
                 email: payer.email,
-                // Enviar identificação (CPF/CNPJ) se coletado no frontend e exigido
                 // identification: { type: payer.identification?.type, number: payer.identification?.number }
             },
             external_reference: order._id.toString(),
             notification_url: process.env.MERCADOPAGO_WEBHOOK_URL
         };
+
+        if (issuer_id) {
+            paymentData.issuer_id = issuer_id;
+        }
 
         console.log("DEBUG: Enviando dados de pagamento para API MP:", paymentData);
 

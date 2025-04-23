@@ -2,9 +2,9 @@
  * @fileoverview Controller para lidar com Webhooks do Mercado Pago.
  */
 
-import crypto from 'crypto'; // Módulo nativo para criptografia (HMAC)
-import Order from '../models/Order.js'; // Modelo para buscar/atualizar pedidos
-import AppError from '../utils/appError.js'; // Para erros operacionais
+import crypto from 'crypto';
+import Order from '../models/Order.js';
+import AppError from '../utils/appError.js';
 import mpClient, { Payment, isMercadoPagoConfigured } from '../config/mercadopago.js'; // SDK e client configurado do MP
 
 /**
@@ -49,7 +49,7 @@ const verifyMercadoPagoSignature = (req, rawBody, webhookSecret) => {
         // 4. Extrair data.id da QUERY STRING
         const dataId = req.query['data.id'];
         if (!dataId) {
-             throw new Error("Parâmetro de consulta 'data.id' ausente na URL do webhook.");
+            throw new Error("Parâmetro de consulta 'data.id' ausente na URL do webhook.");
         }
 
         // 5. Construir a String Base (Template Oficial)
@@ -62,18 +62,21 @@ const verifyMercadoPagoSignature = (req, rawBody, webhookSecret) => {
 
         // 6. Calcular Assinatura Esperada
         // O segredo JÁ FOI VALIDADO como string acima
-        const hmac = crypto.createHmac('sha256', webhookSecret);
-        const calculatedSignature = hmac.update(template).digest('hex');
+        //const hmac = crypto.createHmac('sha256', webhookSecret);
+        //const calculatedSignature = hmac.update(template).digest('hex');
+        const hmac = crypto.createHmac('sha256', Buffer.from(webhookSecret, 'utf-8'));
+        const calculatedSignature = hmac.update(template, 'utf-8').digest('hex');
+
+
         console.log("Webhook Verify MP - Assinatura Calculada:", calculatedSignature);
         console.log("Webhook Verify MP - Assinatura Recebida :", receivedSignature);
-
+        
         // 7. Comparar Assinaturas
         const receivedSigBuffer = Buffer.from(receivedSignature, 'hex');
         const calculatedSigBuffer = Buffer.from(calculatedSignature, 'hex');
 
         if (receivedSigBuffer.length !== calculatedSigBuffer.length ||
-            !crypto.timingSafeEqual(receivedSigBuffer, calculatedSigBuffer))
-        {
+            !crypto.timingSafeEqual(receivedSigBuffer, calculatedSigBuffer)) {
             console.error("Webhook MP: Falha na comparação timingSafeEqual das assinaturas.");
             return { isValid: false, message: "Assinatura inválida.", notificationPayload: null };
         }
@@ -136,13 +139,13 @@ export const handleWebhook = async (req, res, next) => {
                 if (Buffer.isBuffer(req.body)) {
                     notificationPayload = JSON.parse(req.body.toString());
                 } else if (typeof req.body === 'object' && req.body !== null) {
-                     notificationPayload = req.body; // Assume que express.json já parseou
+                    notificationPayload = req.body; // Assume que express.json já parseou
                 } else {
                     throw new Error('Formato de corpo inesperado ao processar sem segredo.');
                 }
             } catch (e) {
-                 console.error("Webhook MP: Erro ao parsear corpo (sem verificação):", e);
-                 return res.status(400).send('Invalid request body.');
+                console.error("Webhook MP: Erro ao parsear corpo (sem verificação):", e);
+                return res.status(400).send('Invalid request body.');
             }
         }
         // --- FIM DA VERIFICAÇÃO/PARSING ---
@@ -185,80 +188,79 @@ export const handleWebhook = async (req, res, next) => {
         console.log(`Webhook MP: Pedido ${order._id} encontrado. Status atual: ${order.orderStatus}.`);
 
         // 5. Atualizar Status do Pedido
-        if (['pending_payment', 'processing', 'paid'].includes(order.orderStatus)) { 
+        if (['pending_payment', 'processing', 'paid'].includes(order.orderStatus)) {
             let newStatus = order.orderStatus;
-            let shouldUpdatePaymentResult = true; 
-            let updatePaidAt = false;
+            let shouldUpdatePaymentResult = true;
 
             // Mapeamento de Status MP -> Status Pedido
             if (finalPaymentStatus === 'approved') {
                 // Só atualiza se estava pendente antes
                 if (order.orderStatus === 'pending_payment') {
-                    newStatus = 'processing'; 
-                    order.paidAt = new Date(); 
+                    newStatus = 'processing';
+                    order.paidAt = new Date();
                 } else {
                     // Se já estava processing/paid, não muda o status, mas pode atualizar paymentResult
-                    shouldUpdatePaymentResult = true; 
+                    shouldUpdatePaymentResult = true;
                     console.log(`Webhook MP: Recebido 'approved' para pedido ${order._id} que já estava ${order.orderStatus}. Atualizando apenas paymentResult.`);
                 }
             } else if (['rejected', 'cancelled', 'refunded', 'charged_back', 'failed'].includes(finalPaymentStatus)) {
-                 // Se falhou/cancelou/reembolsou, marca como 'failed' ou 'cancelled'
-                 // (mesmo que já estivesse 'processing' ou 'paid' no caso de chargeback/refund)
+                // Se falhou/cancelou/reembolsou, marca como 'failed' ou 'cancelled'
+                // (mesmo que já estivesse 'processing' ou 'paid' no caso de chargeback/refund)
                 newStatus = finalPaymentStatus === 'refunded' ? 'refunded' : (finalPaymentStatus === 'cancelled' ? 'cancelled' : 'failed');
                 shouldUpdatePaymentResult = true;
                 // TODO: Retornar estoque se 'failed', 'cancelled', 'refunded', 'charged_back'?
             } else if (['pending', 'in_process', 'authorized'].includes(finalPaymentStatus)) {
-                 // Status intermediários do MP não alteram nosso status 'pending_payment'
-                 shouldUpdatePaymentResult = true; 
-                 console.log(`Webhook MP: Status MP intermediário (${finalPaymentStatus}) recebido para pedido ${order._id}. Mantendo status local.`);
+                // Status intermediários do MP não alteram nosso status 'pending_payment'
+                shouldUpdatePaymentResult = true;
+                console.log(`Webhook MP: Status MP intermediário (${finalPaymentStatus}) recebido para pedido ${order._id}. Mantendo status local.`);
             } else {
-                 // Status desconhecido do MP
-                 shouldUpdatePaymentResult = false; 
-                 console.warn(`Webhook MP: Status MP desconhecido (${finalPaymentStatus}) recebido para pedido ${order._id}.`);
+                // Status desconhecido do MP
+                shouldUpdatePaymentResult = false;
+                console.warn(`Webhook MP: Status MP desconhecido (${finalPaymentStatus}) recebido para pedido ${order._id}.`);
             }
 
             // Atualiza o pedido se necessário
-            if (newStatus !== order.orderStatus || shouldUpdatePaymentResult) { 
-                 if (newStatus !== order.orderStatus) {
+            if (newStatus !== order.orderStatus || shouldUpdatePaymentResult) {
+                if (newStatus !== order.orderStatus) {
                     order.orderStatus = newStatus;
-                 }
-                 // Sempre atualiza paymentResult se shouldUpdatePaymentResult for true
-                 if (shouldUpdatePaymentResult) {
-                     order.paymentResult = {
-                         id: paymentId.toString(),
-                         status: finalPaymentStatus,
-                         update_time: paymentDetails?.date_last_updated || new Date().toISOString(),
-                         email_address: paymentDetails?.payer?.email || null,
-                         // Adiciona dados do cartão se disponíveis na resposta da API MP
-                         card_brand: paymentDetails?.payment_method_id, // ou paymentDetails?.card?.cardholder?.name?
-                         card_last_four: paymentDetails?.card?.last_four_digits
-                     };
-                 }
-                 await order.save();
-                 console.log(`Webhook MP: Pedido ${order._id} atualizado (Status: ${order.orderStatus}).`);
+                }
+                // Sempre atualiza paymentResult se shouldUpdatePaymentResult for true
+                if (shouldUpdatePaymentResult) {
+                    order.paymentResult = {
+                        id: paymentId.toString(),
+                        status: finalPaymentStatus,
+                        update_time: paymentDetails?.date_last_updated || new Date().toISOString(),
+                        email_address: paymentDetails?.payer?.email || null,
+                        // Adiciona dados do cartão se disponíveis na resposta da API MP
+                        card_brand: paymentDetails?.payment_method_id, // ou paymentDetails?.card?.cardholder?.name?
+                        card_last_four: paymentDetails?.card?.last_four_digits
+                    };
+                }
+                await order.save();
+                console.log(`Webhook MP: Pedido ${order._id} atualizado (Status: ${order.orderStatus}).`);
             } else {
-                 console.log(`Webhook MP: Nenhuma atualização necessária para pedido ${order._id}.`);
+                console.log(`Webhook MP: Nenhuma atualização necessária para pedido ${order._id}.`);
             }
         } else {
-             console.log(`Webhook MP: Pedido ${order._id} não está em estado atualizável (${order.orderStatus}), ignorando webhook.`);
+            console.log(`Webhook MP: Pedido ${order._id} não está em estado atualizável (${order.orderStatus}), ignorando webhook.`);
         }
 
         // 6. Responder 200 OK ao Mercado Pago
         console.log(`Webhook MP: Processamento do evento para Pedido ${order._id} concluído.`);
         res.status(200).json({ received: true });
 
-    } catch(err) {
-         console.error(`Webhook MP: Erro GERAL ao processar notificação (Payment ID: ${initialPaymentIdLog || 'N/A'}):`, err);
-         processingError = err; // Guarda erro para log, mas responde 200 OK
+    } catch (err) {
+        console.error(`Webhook MP: Erro GERAL ao processar notificação (Payment ID: ${initialPaymentIdLog || 'N/A'}):`, err);
+        processingError = err; // Guarda erro para log, mas responde 200 OK
     }
 
     // Resposta final - Prioriza 200 OK para evitar retentativas do MP por erros internos nossos
     if (!res.headersSent) {
         if (processingError) {
-             console.error("Webhook MP: Erro interno ocorreu, respondendo 200 OK ao MP.");
-             res.status(200).json({ received: true, processed: false, error: 'Internal processing error occurred.' });
+            console.error("Webhook MP: Erro interno ocorreu, respondendo 200 OK ao MP.");
+            res.status(200).json({ received: true, processed: false, error: 'Internal processing error occurred.' });
         } else {
-             res.status(200).json({ received: true });
+            res.status(200).json({ received: true });
         }
     }
     console.log("---- FIM: Processamento de Webhook Mercado Pago ----");
