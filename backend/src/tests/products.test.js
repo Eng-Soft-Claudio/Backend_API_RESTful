@@ -23,7 +23,7 @@ import { uploadImage, deleteImage } from '../utils/cloudinary.js';
 // Variáveis globais
 let mongoServer;
 let categoryId;
-let adminToken; 
+let adminToken;
 let userToken;
 
 
@@ -39,7 +39,7 @@ beforeAll(async () => {
         fs.mkdirSync(uploadsDir);
     }
     if (!fs.existsSync(dummyImagePath)) {
-        fs.writeFileSync(dummyImagePath, 'dummy image content'); 
+        fs.writeFileSync(dummyImagePath, 'dummy image content');
     }
     mongoServer = await MongoMemoryServer.create();
     const mongoUri = mongoServer.getUri();
@@ -70,7 +70,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
     await Product.deleteMany({});
-}); 
+});
 
 afterAll(async () => {
     await User.deleteMany({});
@@ -78,12 +78,12 @@ afterAll(async () => {
     await Product.deleteMany({});
     await mongoose.disconnect();
     await mongoServer.stop();
-     if (fs.existsSync(dummyImagePath)) {
-         fs.unlinkSync(dummyImagePath);
-     }
-     if (fs.existsSync(uploadsDir)) {
-         fs.rmdirSync(uploadsDir);
-     }
+    if (fs.existsSync(dummyImagePath)) {
+        fs.unlinkSync(dummyImagePath);
+    }
+    if (fs.existsSync(uploadsDir)) {
+        fs.rmdirSync(uploadsDir);
+    }
 });
 
 // --- Testes GET / ---
@@ -125,51 +125,47 @@ describe('/api/products', () => {
         });
 
         it('deve filtrar produtos por categoria (usando ID)', async () => {
-             const otherCategory = await Category.create({ name: 'Categoria Teste 2' });
-             await Product.create({ name: 'Produto Teste 3', price: 300, category: otherCategory._id, image: 'teste3.jpg' });
-             await Product.create({ name: 'Produto Teste 4', price: 400, category: categoryId, image: 'test4.jpg' });
+            const otherCategory = await Category.create({ name: 'Categoria Teste 2' });
+            await Product.create({ name: 'Produto Teste 3', price: 300, category: otherCategory._id, image: 'teste3.jpg' });
+            await Product.create({ name: 'Produto Teste 4', price: 400, category: categoryId, image: 'test4.jpg' });
 
-             const productsInDb = await Product.find({});
-             console.log('PRODUTOS NO DB ANTES DO FILTRO:', productsInDb.map(p => ({ name: p.name, category: p.category })));
-             console.log('FILTRANDO PELA CATEGORIA ID:', categoryId);
+            const res = await request(app)
+                .get(`/api/products?category=${categoryId}`)
+                .expect(200);
 
-             const res = await request(app)
-                 .get(`/api/products?category=${categoryId}`)
-                 .expect(200);
-
-             expect(res.body.results).toBe(1);
-             expect(res.body.products).toHaveLength(1);
-             expect(res.body.products[0].name).toBe('Produto Teste 4');
-             expect(res.body.products[0].category._id.toString()).toBe(categoryId.toString());
+            expect(res.body.results).toBe(1);
+            expect(res.body.products).toHaveLength(1);
+            expect(res.body.products[0].name).toBe('Produto Teste 4');
+            expect(res.body.products[0].category._id.toString()).toBe(categoryId.toString());
         });
 
         it('deve retornar vazio e mensagem apropriada se a categoria do filtro não existir', async () => {
-            const nonExistentId = new mongoose.Types.ObjectId(); 
-             const res = await request(app)
-                 .get(`/api/products?category=${nonExistentId}`)
-                 .expect(200); 
+            const nonExistentId = new mongoose.Types.ObjectId();
+            const res = await request(app)
+                .get(`/api/products?category=${nonExistentId}`)
+                .expect(200);
 
-                expect(res.body).toHaveProperty('status', 'success');
-                expect(res.body).toHaveProperty('results', 0);
-                expect(Array.isArray(res.body.products)).toBe(true);
-                expect(res.body.products).toHaveLength(0);
-                expect(res.body).toHaveProperty('message', 'Categoria não encontrada'); 
+            expect(res.body).toHaveProperty('status', 'success');
+            expect(res.body).toHaveProperty('results', 0);
+            expect(Array.isArray(res.body.products)).toBe(true);
+            expect(res.body.products).toHaveLength(0);
+            expect(res.body).toHaveProperty('message', 'Categoria não encontrada');
         });
 
-         it('deve suportar paginação (limit)', async () => {
-             await Product.create([
-                 { name: 'Produto 1', price: 10, category: categoryId, image: '1.jpg' },
-                 { name: 'Produto 2', price: 20, category: categoryId, image: '2.jpg' },
-                 { name: 'Produto 3', price: 30, category: categoryId, image: '3.jpg' },
-             ]);
+        it('deve suportar paginação (limit)', async () => {
+            await Product.create([
+                { name: 'Produto 1', price: 10, category: categoryId, image: '1.jpg' },
+                { name: 'Produto 2', price: 20, category: categoryId, image: '2.jpg' },
+                { name: 'Produto 3', price: 30, category: categoryId, image: '3.jpg' },
+            ]);
 
-             const res = await request(app)
-                 .get(`/api/products?limit=2`) 
-                 .expect(200);
+            const res = await request(app)
+                .get(`/api/products?limit=2`)
+                .expect(200);
 
-             expect(res.body.results).toBe(2);
-             expect(res.body.products).toHaveLength(2);
-         });
+            expect(res.body.results).toBe(2);
+            expect(res.body.products).toHaveLength(2);
+        });
 
     });
 
@@ -195,17 +191,17 @@ describe('POST /', () => {
             .field('category', productData.category)
             .field('description', productData.description)
             .field('stock', productData.stock)
-            .attach('image', dummyImagePath) 
+            .attach('image', dummyImagePath)
             .expect('Content-Type', /json/)
             .expect(201);
 
-        
+
         expect(res.body.name).toBe(productData.name);
         expect(res.body.price).toBe(Number(productData.price));
         expect(res.body.stock).toBe(Number(productData.stock));
         expect(res.body.category.name).toBe('Categoria Teste 1');
-        expect(res.body.image).toBe('http://fake.cloudinary.com/image.jpg'); 
-        expect(res.body.imagePublicId).toBe('fake_public_id'); 
+        expect(res.body.image).toBe('http://fake.cloudinary.com/image.jpg');
+        expect(res.body.imagePublicId).toBe('fake_public_id');
 
         expect(uploadImage).toHaveBeenCalledTimes(1);
 
@@ -223,30 +219,30 @@ describe('POST /', () => {
             .field('price', '10.00')
             .field('category', categoryId.toString())
             .expect(400);
-            expect(uploadImage).not.toHaveBeenCalled();
+        expect(uploadImage).not.toHaveBeenCalled();
     });
 
     it('Deve retornar 400 se o nome estiver faltando', async () => {
         await request(app)
-        .post('/api/products')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .field('price', '20.00')
-        .field('category', categoryId.toString())
-        .attach('image', dummyImagePath)
-        .expect(400);
+            .post('/api/products')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .field('price', '20.00')
+            .field('category', categoryId.toString())
+            .attach('image', dummyImagePath)
+            .expect(400);
         expect(uploadImage).not.toHaveBeenCalled();
-});
+    });
 
     it('Deve retornar 400 se a categoria for inválida', async () => {
         await request(app)
-        .post('/api/products')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .field('name', 'Teste Categoria Inválida')
-        .field('price', '30.00')
-        .field('category', 'invalid-id')
-        .attach('image', dummyImagePath)
-        .expect(400);
-});
+            .post('/api/products')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .field('name', 'Teste Categoria Inválida')
+            .field('price', '30.00')
+            .field('category', 'invalid-id')
+            .attach('image', dummyImagePath)
+            .expect(400);
+    });
 
     it('Usuário normal NÃO deve conseguir criar produto (403)', async () => {
         await request(app)
@@ -259,15 +255,15 @@ describe('POST /', () => {
             .expect(403);
     });
 
-     it('Deve retornar 401 se não houver token', async () => {
+    it('Deve retornar 401 se não houver token', async () => {
         await request(app)
-        .post('/api/products')
-        .field('name', 'Tentativa Sem Token')
-        .field('price', '50.00')
-        .field('category', categoryId.toString())
-        .attach('image', dummyImagePath)
-        .expect(401);
- });
+            .post('/api/products')
+            .field('name', 'Tentativa Sem Token')
+            .field('price', '50.00')
+            .field('category', categoryId.toString())
+            .attach('image', dummyImagePath)
+            .expect(401);
+    });
 });
 
 // --- Testes PUT /:id ---
@@ -304,7 +300,7 @@ describe('PUT /:id', () => {
             .field('name', updates.name)
             .field('price', updates.price)
             .field('stock', updates.stock)
-            .attach('image', dummyImagePath) 
+            .attach('image', dummyImagePath)
             .expect('Content-Type', /json/)
             .expect(200);
 
@@ -336,7 +332,7 @@ describe('PUT /:id', () => {
         expect(uploadImage).not.toHaveBeenCalled();
         expect(res.body.description).toBe(updates.description);
         expect(res.body.image).toBe('http://original.com/image.jpg');
-        expect(res.body.imagePublicId).toBe(initialPublicId); 
+        expect(res.body.imagePublicId).toBe(initialPublicId);
 
         const dbProduct = await Product.findById(testProductId);
         expect(dbProduct.description).toBe(updates.description);
@@ -354,7 +350,7 @@ describe('PUT /:id', () => {
     });
 
     it('Usuário normal NÃO deve conseguir atualizar produto (403)', async () => {
-         await request(app)
+        await request(app)
             .put(`/api/products/${testProductId}`)
             .set('Authorization', `Bearer ${userToken}`)
             .field('name', 'Tentativa Update User')
@@ -383,10 +379,10 @@ describe('DELETE /:id', () => {
         await request(app)
             .delete(`/api/products/${testProductId}`)
             .set('Authorization', `Bearer ${adminToken}`)
-            .expect(200); 
+            .expect(200);
 
-            expect(deleteImage).toHaveBeenCalledTimes(1);
-            expect(deleteImage).toHaveBeenCalledWith(publicIdToDelete);
+        expect(deleteImage).toHaveBeenCalledTimes(1);
+        expect(deleteImage).toHaveBeenCalledWith(publicIdToDelete);
 
         const dbProduct = await Product.findById(testProductId);
         expect(dbProduct).toBeNull();
@@ -398,7 +394,7 @@ describe('DELETE /:id', () => {
             .delete(`/api/products/${nonExistentId}`)
             .set('Authorization', `Bearer ${adminToken}`)
             .expect(404);
-            expect(deleteImage).not.toHaveBeenCalled(); 
+        expect(deleteImage).not.toHaveBeenCalled();
     });
 
     it('Usuário normal NÃO deve conseguir deletar produto (403)', async () => {
@@ -406,21 +402,21 @@ describe('DELETE /:id', () => {
             .delete(`/api/products/${testProductId}`)
             .set('Authorization', `Bearer ${userToken}`)
             .expect(403);
-            expect(deleteImage).not.toHaveBeenCalled();
+        expect(deleteImage).not.toHaveBeenCalled();
     });
 
-     it('Deve funcionar mesmo se produto não tiver publicId (apenas loga warn)', async () => {
-         const productNoPublicId = await Product.create({
+    it('Deve funcionar mesmo se produto não tiver publicId (apenas loga warn)', async () => {
+        const productNoPublicId = await Product.create({
             name: 'Sem Public ID', price: 5, category: categoryId, image: 'no_id.jpg'
-         });
+        });
 
-         await request(app)
+        await request(app)
             .delete(`/api/products/${productNoPublicId._id}`)
             .set('Authorization', `Bearer ${adminToken}`)
             .expect(200);
 
-            expect(deleteImage).not.toHaveBeenCalled();
-         const dbProduct = await Product.findById(productNoPublicId._id);
-         expect(dbProduct).toBeNull();
-     });
+        expect(deleteImage).not.toHaveBeenCalled();
+        const dbProduct = await Product.findById(productNoPublicId._id);
+        expect(dbProduct).toBeNull();
+    });
 });

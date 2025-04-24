@@ -3,17 +3,17 @@ import request from 'supertest';
 import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import jwt from 'jsonwebtoken';
-import app from '../app.js'; 
-import Order from '../models/Order.js'; 
-import Cart from '../models/Cart.js'; 
-import Product from '../models/Product.js'; 
-import Category from '../models/Category.js'; 
-import User from '../models/User.js'; 
+import app from '../app.js';
+import Order from '../models/Order.js';
+import Cart from '../models/Cart.js';
+import Product from '../models/Product.js';
+import Category from '../models/Category.js';
+import User from '../models/User.js';
 import Address from '../models/Address.js';
 
 // Mock para teste com Mercado Pago
 jest.mock('mercadopago', () => {
-    const mockPaymentCreate = jest.fn(); 
+    const mockPaymentCreate = jest.fn();
     const MockPayment = jest.fn().mockImplementation(() => ({
         create: mockPaymentCreate
     }));
@@ -22,8 +22,8 @@ jest.mock('mercadopago', () => {
     return {
         MercadoPagoConfig: MockMercadoPagoConfig,
         Payment: MockPayment,
-        __esModule: true, 
-        _mockPaymentCreate: mockPaymentCreate 
+        __esModule: true,
+        _mockPaymentCreate: mockPaymentCreate
     };
 });
 
@@ -31,14 +31,14 @@ jest.mock('mercadopago', () => {
 import { _mockPaymentCreate as mockMercadoPagoPaymentCreate } from 'mercadopago';
 
 let mongoServer;
-let testUserToken; 
+let testUserToken;
 let testUserId;
-let adminUserToken; 
+let adminUserToken;
 let adminUserId;
-let product1Id; 
-let product2Id; 
+let product1Id;
+let product2Id;
 let testCategoryId;
-let userAddressId; 
+let userAddressId;
 
 // --- Setup e Teardown ---
 beforeAll(async () => {
@@ -136,39 +136,36 @@ describe('/api/orders', () => {
     // --- Testes POST / ---
     describe('POST /', () => {
         beforeEach(async () => {
-            console.log("--- beforeEach POST / --- Limpando Carrinho...");
             // Garante limpeza do carrinho
             await Cart.deleteMany({ user: testUserId });
             // Garante que o usuário tenha um carrinho com itens antes de cada teste POST
-            console.log("--- beforeEach POST / --- Criando Carrinho...");
-            await Cart.create({ user: testUserId, items: [
-                { product: product1Id, quantity: 2 }, 
-                { product: product2Id, quantity: 1 }  
-            ]});
+            await Cart.create({
+                user: testUserId, items: [
+                    { product: product1Id, quantity: 2 },
+                    { product: product2Id, quantity: 1 }
+                ]
+            });
             const cartCreated = await Cart.findOne({ user: testUserId });
-        console.log("--- beforeEach POST / --- Carrinho Criado:", JSON.stringify(cartCreated?.items, null, 2));
         });
-        
+
 
         it('deve criar um pedido com sucesso com carrinho e endereço válidos', async () => {
             const orderData = {
                 shippingAddressId: userAddressId.toString(),
                 paymentMethod: 'PIX Teste'
             };
-            
+
             const cartBeforeReq = await Cart.findOne({ user: testUserId });
-            console.log("--- Teste POST / Sucesso --- Carrinho ANTES da request:", JSON.stringify(cartBeforeReq?.items, null, 2));
-            
+
             const res = await request(app)
                 .post('/api/orders')
                 .set('Authorization', `Bearer ${testUserToken}`)
                 .send(orderData)
                 .expect('Content-Type', /json/)
                 .expect(201);
-            console.log("--- Teste POST / Sucesso --- Resposta orderItems:", JSON.stringify(res.body.data.order.orderItems, null, 2));
             expect(res.body.status).toBe('success');
             expect(res.body.data.order).toBeDefined();
-            expect(res.body.data.order.orderItems).toHaveLength(2); // adicionei para ver se a falha e aqui
+            expect(res.body.data.order.orderItems).toHaveLength(2);
             const order = res.body.data.order;
 
             // Verifica dados básicos
@@ -202,11 +199,11 @@ describe('/api/orders', () => {
             // Verifica se o estoque foi decrementado no DB
             const dbProd1 = await Product.findById(product1Id);
             const dbProd2 = await Product.findById(product2Id);
-            expect(dbProd1.stock).toBe(13); 
-            expect(dbProd2.stock).toBe(2); 
+            expect(dbProd1.stock).toBe(13);
+            expect(dbProd2.stock).toBe(2);
         });
 
-        it('deve retornar erro 400 se o carrinho estiver vazio', async () => {
+        it('deve retornar erro 400 se o carrinho estiver vazio ou não existir', async () => {
             // Limpa o carrinho criado no beforeEach
             await Cart.deleteMany({ user: testUserId });
 
@@ -218,7 +215,7 @@ describe('/api/orders', () => {
                 .post('/api/orders')
                 .set('Authorization', `Bearer ${testUserToken}`)
                 .send(orderData)
-                .expect(400);
+                .expect(404);
         });
 
         it('deve retornar erro 400 se o endereço de entrega for inválido', async () => {
@@ -237,7 +234,7 @@ describe('/api/orders', () => {
         it('deve retornar erro 400 se o estoque for insuficiente', async () => {
             // Atualiza o carrinho para pedir mais do que o estoque
             await Cart.findOneAndUpdate({ user: testUserId }, {
-                items: [{ product: product1Id, quantity: 20 }] 
+                items: [{ product: product1Id, quantity: 20 }]
             });
 
             const orderData = {
@@ -249,18 +246,17 @@ describe('/api/orders', () => {
                 .set('Authorization', `Bearer ${testUserToken}`)
                 .send(orderData)
                 .expect(400);
-            console.log("DEBUG: Mensagem de erro estoque insuficiente:", res.body.message);
 
             // Verifica mensagem de erro específica
-            expect(res.body.message).toMatch(/Problemas de estoque/i);
-            expect(res.body.message).toMatch(/Produto Pedido 1/);
+            expect(res.body.message).toContain('Problemas de estoque:');
+            expect(res.body.message).toContain('Estoque insuficiente para Produto Pedido 1');
             expect(res.body.message).toContain('(Disponível: 15, Solicitado: 20)');
 
             // Garante que o estoque não foi alterado e carrinho não foi limpo
-             const dbProd1 = await Product.findById(product1Id);
-             const dbCart = await Cart.findOne({ user: testUserId });
-             expect(dbProd1.stock).toBe(15);
-             expect(dbCart.items).toHaveLength(1); 
+            const dbProd1 = await Product.findById(product1Id);
+            const dbCart = await Cart.findOne({ user: testUserId });
+            expect(dbProd1.stock).toBe(15);
+            expect(dbCart.items).toHaveLength(1);
         });
 
         it('deve retornar 401 se não estiver autenticado', async () => {
@@ -284,7 +280,7 @@ describe('/api/orders', () => {
             const orderData = {
                 user: testUserId,
                 orderItems: [{ productId: product1Id, name: 'Prod 1', quantity: 1, price: 25 }],
-                shippingAddress: { street: 'Rua A', number: '1', neighborhood: 'A', city: 'A', state: 'AA', postalCode: '11111-111', country: 'A'},
+                shippingAddress: { street: 'Rua A', number: '1', neighborhood: 'A', city: 'A', state: 'AA', postalCode: '11111-111', country: 'A' },
                 paymentMethod: 'Teste',
                 itemsPrice: 25,
                 shippingPrice: 5,
@@ -310,19 +306,19 @@ describe('/api/orders', () => {
         });
 
         it('deve retornar lista vazia se usuário não tiver pedidos', async () => {
-             // Cria um usuário sem pedidos
-             const newUser = await User.create({
+            // Cria um usuário sem pedidos
+            const newUser = await User.create({
                 name: 'No Orders',
                 email: 'noorders@test.com',
                 password: 'password123'
             });
             const newToken = jwt.sign({ id: newUser._id, role: newUser.role }, process.env.JWT_SECRET);
-        
+
             const res = await request(app)
                 .get('/api/orders/my')
                 .set('Authorization', `Bearer ${newToken}`)
                 .expect(200);
-        
+
             expect(res.body.results).toBe(0);
             expect(res.body.data.orders).toHaveLength(0);
         });
@@ -336,15 +332,15 @@ describe('/api/orders', () => {
 
     // --- Testes GET /:id ---
     describe('GET /:id', () => {
-         let userOrder; 
-         let adminOrder; 
+        let userOrder;
+        let adminOrder;
 
-         beforeEach(async () => {
-             const orderDataUser = { user: testUserId, /* ... outros dados ... */ orderItems: [], shippingAddress: { street: 'U', number:'1', neighborhood:'U', city:'U', state:'UU', postalCode:'11111-111', country:'U'}, paymentMethod:'U', totalPrice: 10 };
-             const orderDataAdmin = { user: adminUserId, /* ... outros dados ... */ orderItems: [], shippingAddress: { street: 'A', number:'1', neighborhood:'A', city:'A', state:'AA', postalCode:'11111-111', country:'A'}, paymentMethod:'A', totalPrice: 20 };
-             userOrder = await Order.create(orderDataUser);
-             adminOrder = await Order.create(orderDataAdmin);
-         });
+        beforeEach(async () => {
+            const orderDataUser = { user: testUserId, /* ... outros dados ... */ orderItems: [], shippingAddress: { street: 'U', number: '1', neighborhood: 'U', city: 'U', state: 'UU', postalCode: '11111-111', country: 'U' }, paymentMethod: 'U', totalPrice: 10 };
+            const orderDataAdmin = { user: adminUserId, /* ... outros dados ... */ orderItems: [], shippingAddress: { street: 'A', number: '1', neighborhood: 'A', city: 'A', state: 'AA', postalCode: '11111-111', country: 'A' }, paymentMethod: 'A', totalPrice: 20 };
+            userOrder = await Order.create(orderDataUser);
+            adminOrder = await Order.create(orderDataAdmin);
+        });
 
         it('usuário deve obter seu próprio pedido por ID', async () => {
             const res = await request(app)
@@ -358,8 +354,8 @@ describe('/api/orders', () => {
 
         it('usuário NÃO deve obter pedido de outro usuário por ID (retorna 404)', async () => {
             await request(app)
-                .get(`/api/orders/${adminOrder._id}`) 
-                .set('Authorization', `Bearer ${testUserToken}`) 
+                .get(`/api/orders/${adminOrder._id}`)
+                .set('Authorization', `Bearer ${testUserToken}`)
                 .expect(404);
         });
 
@@ -369,26 +365,26 @@ describe('/api/orders', () => {
                 .get(`/api/orders/${userOrder._id}`)
                 .set('Authorization', `Bearer ${adminUserToken}`)
                 .expect(200);
-             expect(res1.body.data.order._id.toString()).toBe(userOrder._id.toString());
+            expect(res1.body.data.order._id.toString()).toBe(userOrder._id.toString());
 
-             // Admin pegando seu próprio pedido
-             const res2 = await request(app)
+            // Admin pegando seu próprio pedido
+            const res2 = await request(app)
                 .get(`/api/orders/${adminOrder._id}`)
                 .set('Authorization', `Bearer ${adminUserToken}`)
                 .expect(200);
-             expect(res2.body.data.order._id.toString()).toBe(adminOrder._id.toString());
+            expect(res2.body.data.order._id.toString()).toBe(adminOrder._id.toString());
         });
 
         it('deve retornar 404 se o ID do pedido não existir', async () => {
             const nonExistentId = new mongoose.Types.ObjectId();
-             await request(app)
+            await request(app)
                 .get(`/api/orders/${nonExistentId}`)
                 .set('Authorization', `Bearer ${testUserToken}`)
                 .expect(404);
         });
 
         it('deve retornar 400 se o ID do pedido for inválido', async () => {
-             await request(app)
+            await request(app)
                 .get('/api/orders/invalid-id')
                 .set('Authorization', `Bearer ${testUserToken}`)
                 .expect(400);
@@ -401,63 +397,90 @@ describe('/api/orders', () => {
         });
     });
 
-    // --- Testes POST /:id/create-payment ---
-    describe('POST /:id/create-payment', () => {
-        let testOrder; // Pedido criado
+    // --- Testes POST /:id/pay ---
+    describe('POST /:id/pay', () => {
+        let testOrder;
 
         // Cria um pedido PENDENTE antes de cada teste deste bloco
         beforeEach(async () => {
             const orderData = {
                 user: testUserId,
-                orderItems: [{ productId: product1Id, name: 'Prod 1 Pay', quantity: 1, price: 25, image: 'p1.jpg' }],
-                shippingAddress: { street: 'Pay St', number: '1', neighborhood: 'Pay', city: 'Pay', state: 'PY', postalCode: '11111-111', country: 'Payland' },
-                paymentMethod: 'PIX', 
+                orderItems: [{
+                    productId: product1Id,
+                    name: 'Prod 1 Pay',
+                    quantity: 1,
+                    price: 25,
+                    image: 'p1.jpg'
+                }],
+                shippingAddress: {
+                    label: 'Same',
+                    street: 'Pay St',
+                    number: '1',
+                    complement: 'Apto.1',
+                    neighborhood: 'Pay',
+                    city: 'Pay',
+                    state: 'PY',
+                    postalCode: '11111-111',
+                    country: 'Payland',
+                    phone: '(11)1111-1111',
+                },
+                paymentMethod: 'visa',
                 itemsPrice: 25,
                 shippingPrice: 10,
                 totalPrice: 35,
-                orderStatus: 'pending_payment' 
+                orderStatus: 'pending_payment',
+                installments: 1,
             };
             testOrder = await Order.create(orderData);
         });
 
-        it('deve criar um pagamento PIX com sucesso para um pedido pendente', async () => {
+        it('deve processar um pagamento com cartão simulado com sucesso', async () => {
+            // Configura mock para retornar 'approved'
+            mockMercadoPagoPaymentCreate.mockResolvedValueOnce({
+                id: 987654321,
+                status: 'approved',
+                date_last_updated: new Date().toISOString(),
+                payer: { email: 'test@test.com' },
+                payment_method_id: 'visa',
+                card: { last_four_digits: '1234' },
+                installments: 1,
+                external_reference: testOrder._id.toString()
+            });
+
+            const paymentBody = {
+                token: "VALID_CARD_TOKEN_PLACEHOLDER",
+                payment_method_id: "visa",
+                installments: 1,
+                payer: { email: "test@test.com" }
+            };
+
             const res = await request(app)
-                .post(`/api/orders/${testOrder._id}/create-payment`)
+                .post(`/api/orders/${testOrder._id}/pay`)
                 .set('Authorization', `Bearer ${testUserToken}`)
-                .send({})
+                .send(paymentBody)
                 .expect('Content-Type', /json/)
                 .expect(200);
 
             expect(res.body.status).toBe('success');
-            expect(res.body.message).toContain('Pagamento PIX iniciado');
-            expect(res.body.data).toBeDefined();
-            expect(res.body.data.orderId.toString()).toBe(testOrder._id.toString());
-            expect(res.body.data.mercadopagoPaymentId).toBe(1234567890)
-            expect(res.body.data.qrCodeBase64).toBeDefined();
-            expect(res.body.data.qrCode).toBeDefined();
-
-            // Verifica se a chamada ao mock do MP foi feita corretamente
+            expect(res.body.message).toContain('Pagamento processado com status: approved');
+            expect(res.body.data.order.orderStatus).toBe('processing');
+            expect(res.body.data.order.paidAt).toBeDefined();
+            expect(res.body.data.order.mercadopagoPaymentId).toBe('987654321');
             expect(mockMercadoPagoPaymentCreate).toHaveBeenCalledTimes(1);
-            expect(mockMercadoPagoPaymentCreate).toHaveBeenCalledWith(expect.objectContaining({
-                body: expect.objectContaining({
-                    transaction_amount: testOrder.totalPrice, 
-                    payment_method_id: 'pix',
-                    payer: expect.objectContaining({ email: 'order.user@test.com' }), 
-                    external_reference: testOrder._id.toString() 
-                })
-            }));
-
-            // Verifica se o ID do pagamento MP foi salvo no pedido no DB
-            const dbOrder = await Order.findById(testOrder._id);
-            expect(dbOrder.mercadopagoPaymentId).toBe('1234567890'); 
         });
 
         it('deve retornar 404 se o pedido não for encontrado', async () => {
             const nonExistentId = new mongoose.Types.ObjectId();
+            const validBody = {
+                token: "VALID_CARD_TOKEN_PLACEHOLDER",
+                payment_method_id: "visa",
+                installments: 1,
+                payer: { email: "test@test.com" }
+            };
             await request(app)
-                .post(`/api/orders/${nonExistentId}/create-payment`)
+                .post(`/api/orders/${nonExistentId}/pay`)
                 .set('Authorization', `Bearer ${testUserToken}`)
-                .send({})
+                .send(validBody)
                 .expect(404);
             expect(mockMercadoPagoPaymentCreate).not.toHaveBeenCalled();
         });
@@ -467,43 +490,56 @@ describe('/api/orders', () => {
             await Order.findByIdAndUpdate(testOrder._id, { orderStatus: 'processing' });
 
             await request(app)
-                .post(`/api/orders/${testOrder._id}/create-payment`)
+                .post(`/api/orders/${testOrder._id}/pay`)
                 .set('Authorization', `Bearer ${testUserToken}`)
-                .send({})
+                .send({ token: 't', payment_method_id: 'visa', installments: 1, payer: { email: 'e' } })
                 .expect(400);
             expect(mockMercadoPagoPaymentCreate).not.toHaveBeenCalled();
         });
 
-        it('deve retornar 400 se o pedido já tiver um ID de pagamento MP', async () => {
+        it('deve retornar 400 se o pedido já tiver um ID de pagamento MP (lógica no payOrder)', async () => {
             // Adicionar um ID de pagamento ao pedido
-             await Order.findByIdAndUpdate(testOrder._id, { mercadopagoPaymentId: 'EXISTING_MP_ID' });
+            await Order.findByIdAndUpdate(testOrder._id, { mercadopagoPaymentId: 'EXISTING_MP_ID' });
 
-             await request(app)
-                .post(`/api/orders/${testOrder._id}/create-payment`)
+            const validBody = {
+                token: "VALID_CARD_TOKEN_PLACEHOLDER",
+                payment_method_id: "visa",
+                installments: 1,
+                payer: { email: "test@test.com" }
+            };
+            const res = await request(app)
+                .post(`/api/orders/${testOrder._id}/pay`)
                 .set('Authorization', `Bearer ${testUserToken}`)
-                .send({})
+                .send(validBody)
                 .expect(400);
+            expect(res.body.message).toMatch(/Pagamento para este pedido já foi iniciado/i);
             expect(mockMercadoPagoPaymentCreate).not.toHaveBeenCalled();
         });
 
-         it('deve retornar 502 se o Mercado Pago retornar erro', async () => {
-             // Configura o mock para REJEITAR a promessa
-             mockMercadoPagoPaymentCreate.mockRejectedValue(new Error('Erro simulado do MP'));
+        it('deve retornar 500 (AppError) se o Mercado Pago retornar erro', async () => {
+            // Configura o mock para REJEITAR a promessa
+            mockMercadoPagoPaymentCreate.mockRejectedValue(new Error('Erro simulado do MP'));
 
-             await request(app)
-                .post(`/api/orders/${testOrder._id}/create-payment`)
+            const validBody = {
+                token: "VALID_CARD_TOKEN_PLACEHOLDER",
+                payment_method_id: "visa",
+                installments: 1,
+                payer: { email: "test@test.com" }
+            };
+            await request(app)
+                .post(`/api/orders/${testOrder._id}/pay`)
                 .set('Authorization', `Bearer ${testUserToken}`)
-                .send({})
-                .expect(500); 
+                .send(validBody)
+                .expect(500);
             expect(mockMercadoPagoPaymentCreate).toHaveBeenCalledTimes(1);
-         });
+        });
 
-         it('deve retornar 401 se não estiver autenticado', async () => {
-             await request(app)
-                .post(`/api/orders/${testOrder._id}/create-payment`)
-                .send({})
+        it('deve retornar 401 se não estiver autenticado', async () => {
+            await request(app).post(`/api/orders/${testOrder._id}/pay`)
+            await request(app)
+                .post(`/api/orders/${testOrder._id}/pay`)
+                .send({ token: 't', payment_method_id: 'visa', installments: 1, payer: { email: 'e' } })
                 .expect(401);
-         });
+        });
     });
-
-}); 
+});

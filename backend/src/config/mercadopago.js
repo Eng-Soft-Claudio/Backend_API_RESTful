@@ -11,7 +11,6 @@ if (!accessToken) {
     console.error("ERRO CRÍTICO: MP_ACCESS_TOKEN não definido nas variáveis de ambiente.");
 } else {
     client = new MercadoPagoConfig({ accessToken: accessToken });
-    console.log("Cliente Mercado Pago configurado.");
 }
 
 export default client;

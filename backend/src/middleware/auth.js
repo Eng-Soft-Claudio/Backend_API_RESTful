@@ -30,7 +30,7 @@ export const authenticate = async (req, res, next) => {
           return next(new AppError('Usuário recentemente mudou a senha. Por favor, logue novamente.', 401));
         }
 
-        req.user = { id: decoded.id, role: decoded.role };
+        req.user = { id: decoded.id, role: decoded.role, name: currentUser.name};
 
         next();
 

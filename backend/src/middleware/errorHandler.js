@@ -42,7 +42,6 @@ const handleJWTExpiredError = () =>
 // --- Funções de Envio de Resposta ---
 const sendErrorDev = (err, res) => {
     if (process.env.NODE_ENV !== 'test') {
-        console.error('💥 ERROR DEV:', err);
     }
     res.status(err.statusCode || 500).json({
         status: err.status || 'error',
@@ -53,7 +52,6 @@ const sendErrorDev = (err, res) => {
 };
 
 const sendErrorProd = (err, res) => {
-    console.error('💥 ERROR PROD:', err.message); 
 
     if (err.isOperational) {
         res.status(err.statusCode).json({

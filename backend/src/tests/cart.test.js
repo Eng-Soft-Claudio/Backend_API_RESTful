@@ -282,8 +282,6 @@ describe('/api/cart', () => {
                 { product: product1Id, quantity: 1 },
                 { product: product2Id, quantity: 2 }
             ]});
-            console.log('Carrinho criado no beforeEach DELETE:', JSON.stringify(cartWithItems, null, 2));
-            console.log('Tentando deletar productId:', product1Id);
         });
 
         it('deve remover um item existente do carrinho', async () => {

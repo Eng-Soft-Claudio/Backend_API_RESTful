@@ -3,8 +3,8 @@ import Product from '../models/Product.js';
 import Category from '../models/Category.js';
 import { validationResult } from 'express-validator';
 import { uploadImage, deleteImage } from '../utils/cloudinary.js';
-import mongoose from 'mongoose'; 
-import AppError from '../utils/appError.js'; 
+import mongoose from 'mongoose';
+import AppError from '../utils/appError.js';
 
 /**
  * @description Cria um novo produto. Espera que Multer (upload.single) e as validações rodem ANTES na rota.
@@ -21,33 +21,29 @@ export const createProduct = async (req, res, next) => {
     try {
 
         if (!req.file) {
-            console.error("Controller createProduct: req.file não definido após middlewares.");
             return res.status(400).json({ error: 'Arquivo de imagem obrigatório não encontrado.' });
         }
-        console.log("EXECUTANDO createProduct - Antes do uploadImage");
         const result = await uploadImage(req.file.path);
-        console.log("EXECUTANDO createProduct - Após uploadImage, result:", result);
         const productData = {
             name: req.body.name,
-            price: Number(req.body.price), 
-            category: req.body.category, 
-            description: req.body.description, 
+            price: Number(req.body.price),
+            category: req.body.category,
+            description: req.body.description,
             stock: req.body.stock ? Number(req.body.stock) : 0,
-            image: result.secure_url,   
-            imagePublicId: result.public_id 
+            image: result.secure_url,
+            imagePublicId: result.public_id
         };
 
         const product = await Product.create(productData);
 
         const populatedProduct = await Product.findById(product._id)
-            .populate('category', 'name slug') 
+            .populate('category', 'name slug')
             .lean();
 
-        res.status(201).json(populatedProduct); 
+        res.status(201).json(populatedProduct);
 
     } catch (err) {
-        console.error("ERRO NO CATCH de createProduct:", err);
-        next(err); 
+        next(err);
     }
 };
 
@@ -65,7 +61,7 @@ export const getProducts = async (req, res, next) => {
 
     try {
         const { page = 1, limit = 10, q, category: categoryIdentifier, sort } = req.query;
-        const filterQuery = {}; 
+        const filterQuery = {};
 
         if (categoryIdentifier) {
             let foundCategory = await Category.findOne({
@@ -73,7 +69,7 @@ export const getProducts = async (req, res, next) => {
                     { _id: mongoose.Types.ObjectId.isValid(categoryIdentifier) ? categoryIdentifier : null },
                     { slug: categoryIdentifier.toLowerCase() }
                 ]
-            }).select('_id').lean(); 
+            }).select('_id').lean();
 
             if (foundCategory) {
                 filterQuery.category = foundCategory._id;
@@ -97,24 +93,24 @@ export const getProducts = async (req, res, next) => {
         const sortOptions = sort ? String(sort).split(',').join(' ') : '-createdAt';
 
         const [products, totalProducts] = await Promise.all([
-            Product.find(filterQuery)              
-                   .populate('category', 'name slug')
-                   .sort(sortOptions)
-                   .limit(limit)
-                   .skip((page - 1) * limit)
-                   .lean(),
-            Product.countDocuments(filterQuery)     
+            Product.find(filterQuery)
+                .populate('category', 'name slug')
+                .sort(sortOptions)
+                .limit(limit)
+                .skip((page - 1) * limit)
+                .lean(),
+            Product.countDocuments(filterQuery)
         ]);
 
         const totalPages = Math.ceil(totalProducts / limit);
 
         res.status(200).json({
             status: 'success',
-            results: products.length, 
-            totalProducts: totalProducts, 
-            totalPages: totalPages,       
-            currentPage: page,          
-            products,                  
+            results: products.length,
+            totalProducts: totalProducts,
+            totalPages: totalPages,
+            currentPage: page,
+            products,
         });
 
     } catch (err) {
@@ -135,15 +131,15 @@ export const updateProduct = async (req, res, next) => {
     }
 
     try {
-        const updates = { ...req.body }; 
+        const updates = { ...req.body };
         const productId = req.params.id;
-        let oldPublicId = null; 
+        let oldPublicId = null;
 
         const existingProduct = await Product.findById(productId).lean();
         if (!existingProduct) {
-             return next(new AppError('Produto não encontrado para atualizar.', 404));
+            return next(new AppError('Produto não encontrado para atualizar.', 404));
         }
-        oldPublicId = existingProduct.imagePublicId; 
+        oldPublicId = existingProduct.imagePublicId;
 
         if (req.file) {
             if (oldPublicId) {
@@ -153,13 +149,11 @@ export const updateProduct = async (req, res, next) => {
                     console.error(`Falha ao deletar imagem antiga ${oldPublicId} do Cloudinary durante update:`, cloudinaryErr.message);
                 }
             }
-            console.log("EXECUTANDO updateProduct - Antes do uploadImage"); 
             const result = await uploadImage(req.file.path);
-            console.log("EXECUTANDO updateProduct - Após uploadImage, result:", result);
-            updates.image = result.secure_url;       
-            updates.imagePublicId = result.public_id; 
+            updates.image = result.secure_url;
+            updates.imagePublicId = result.public_id;
         } else {
-             delete updates.imagePublicId;
+            delete updates.imagePublicId;
         }
         if (updates.price !== undefined) {
             updates.price = Number(updates.price);
@@ -167,10 +161,10 @@ export const updateProduct = async (req, res, next) => {
         if (updates.stock !== undefined) {
             updates.stock = Number(updates.stock);
         }
-        
+
         const product = await Product.findByIdAndUpdate(
             productId,
-            updates, 
+            updates,
             { new: true, runValidators: true }
         ).populate('category', 'name slug');
 
@@ -201,20 +195,16 @@ export const deleteProduct = async (req, res, next) => {
     try {
         const productId = req.params.id;
 
-        const product = await Product.findById(productId).lean(); 
+        const product = await Product.findById(productId).lean();
 
         if (!product) {
             return next(new AppError('Produto não encontrado para deletar.', 404));
         }
-
         if (product.imagePublicId) {
             try {
                 await deleteImage(product.imagePublicId);
             } catch (cloudinaryErr) {
-                console.error(`Falha ao deletar imagem ${product.imagePublicId} do Cloudinary durante deleção do produto ${productId}:`, cloudinaryErr.message);
             }
-        } else {
-             console.warn(`Produto ${productId} não possuía imagePublicId para deletar do Cloudinary.`);
         }
 
         const deletedProduct = await Product.findByIdAndDelete(productId);
@@ -223,13 +213,13 @@ export const deleteProduct = async (req, res, next) => {
             return next(new AppError('Produto não encontrado ao tentar deletar do DB (após busca inicial).', 404));
         }
 
-        res.status(200).json({ 
+        res.status(200).json({
             status: 'success',
             message: 'Produto removido com sucesso',
         });
 
     } catch (err) {
-        
+
         next(err);
     }
 };

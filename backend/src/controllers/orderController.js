@@ -5,7 +5,7 @@ import Product from '../models/Product.js';
 import Address from '../models/Address.js';
 import AppError from '../utils/appError.js';
 import { validationResult } from 'express-validator';
-import mongoose from 'mongoose'; 
+import mongoose from 'mongoose';
 import mpClient, { Payment, isMercadoPagoConfigured } from '../config/mercadopago.js';
 import User from '../models/User.js';
 
@@ -32,7 +32,15 @@ export const createOrder = async (req, res, next) => {
 
     try {
         const cart = await Cart.findOne({ user: userId }).populate('items.product').setOptions(sessionOptions);
-        if (!cart || cart.items.length === 0) { /* ... erro carrinho vazio ... */ }
+
+        if (!cart) {
+            if (session) { await session.abortTransaction(); session.endSession(); }
+            return next(new AppError('Carrinho não encontrado.', 404));
+        }
+        if (cart.items.length === 0) {
+            if (session) { await session.abortTransaction(); session.endSession(); }
+            return next(new AppError('Seu carrinho está vazio...', 400));
+        }
 
         const shippingAddress = await Address.findOne({ _id: shippingAddressId, user: userId }).setOptions(sessionOptions);
         if (!shippingAddress) { /* ... erro endereço inválido ... */ }
@@ -44,7 +52,9 @@ export const createOrder = async (req, res, next) => {
         for (const item of cart.items) {
             const product = item.product;
             if (!product) { /* ... erro produto não encontrado ... */ continue; }
-            if (product.stock < item.quantity) { stockErrors.push(/*...*/); }
+            if (product.stock < item.quantity) {
+                stockErrors.push(`Estoque insuficiente para ${product.name} (Disponível: ${product.stock}, Solicitado: ${item.quantity}).`);
+            }
             else {
                 itemsPrice += item.quantity * product.price;
                 orderItems.push({
@@ -57,7 +67,15 @@ export const createOrder = async (req, res, next) => {
             }
         }
 
-        if (stockErrors.length > 0) { /* ... erro estoque insuficiente ... */ }
+        if (stockErrors.length > 0) {
+            if (session) { await session.abortTransaction(); session.endSession(); }
+            return next(new AppError(`Problemas de estoque: ${stockErrors.join('; ')}`, 400));
+        }
+
+        if (orderItems.length === 0) {
+            if (session) { await session.abortTransaction(); session.endSession(); }
+            return next(new AppError(`Problemas de estoque: ${stockErrors.join('; ')}`, 400));
+        }
 
         const shippingPrice = itemsPrice > 100 ? 0 : 10;
         const totalPrice = itemsPrice + shippingPrice;
@@ -135,15 +153,18 @@ export const payOrder = async (req, res, next) => {
         const order = await Order.findOne({ _id: orderId, user: userId });
         if (!order) { return next(new AppError('Pedido não encontrado ou não pertence a você.', 404)); }
         if (order.orderStatus !== 'pending_payment') { return next(new AppError(`Pedido não pode ser pago (Status: ${order.orderStatus}).`, 400)); }
+        if (order.mercadopagoPaymentId) {
+            return next(new AppError(`Pagamento para este pedido já foi iniciado ou processado.`, 400));
+        }
 
         // Montar corpo para a API de Pagamentos V1 do MP
         const paymentData = {
             transaction_amount: order.totalPrice,
-            token: token, 
+            token: token,
             description: `Pedido #${order._id.toString().slice(-6)} - E-commerce`,
-            installments: installments, 
-            payment_method_id: payment_method_id, 
-            payer: { 
+            installments: installments,
+            payment_method_id: payment_method_id,
+            payer: {
                 email: payer.email,
                 // identification: { type: payer.identification?.type, number: payer.identification?.number }
             },
@@ -155,16 +176,11 @@ export const payOrder = async (req, res, next) => {
             paymentData.issuer_id = issuer_id;
         }
 
-        console.log("DEBUG: Enviando dados de pagamento para API MP:", paymentData);
-
         const payment = new Payment(mpClient);
-        const mpResponse = await payment.create({ body: paymentData }); // Usa a instância correta
-
-        console.log("DEBUG: Resposta síncrona da API de Pagamento MP:", mpResponse);
+        const mpResponse = await payment.create({ body: paymentData });
 
         // Analisar a resposta SÍNCRONA do MP
         if (!mpResponse || !mpResponse.id || !mpResponse.status) {
-            console.error("ERRO: Resposta inesperada da API de Pagamento MP:", mpResponse);
             return next(new AppError('Falha ao processar pagamento junto ao Mercado Pago (resposta inválida).', 502));
         }
 
@@ -172,26 +188,21 @@ export const payOrder = async (req, res, next) => {
         order.mercadopagoPaymentId = mpResponse.id.toString();
         order.paymentResult = {
             id: mpResponse.id.toString(),
-            status: mpResponse.status, 
+            status: mpResponse.status,
             update_time: mpResponse.date_last_updated || new Date().toISOString(),
             email_address: mpResponse.payer?.email || null,
-            card_brand: mpResponse.payment_method_id, 
-            card_last_four: mpResponse.card?.last_four_digits || null 
+            card_brand: mpResponse.payment_method_id,
+            card_last_four: mpResponse.card?.last_four_digits || null
         };
-        order.installments = mpResponse.installments || 1; 
+        order.installments = mpResponse.installments || 1;
 
         // Atualiza status do pedido local
         if (mpResponse.status === 'approved') {
             order.orderStatus = 'processing';
             order.paidAt = new Date();
-            console.log(`Pagamento ${mpResponse.id} APROVADO sincronamente. Status do pedido atualizado.`);
         } else if (['rejected', 'cancelled', 'failed', 'charged_back'].includes(mpResponse.status)) {
             order.orderStatus = 'failed';
-            console.log(`Pagamento ${mpResponse.id} FALHOU sincronamente. Status do pedido atualizado.`);
             // Considerar retornar estoque aqui se o pagamento for rejeitado imediatamente?
-        } else {
-            // Mantém 'pending_payment' para status como 'authorized', 'in_process' ou 'pending'
-            console.log(`Pagamento ${mpResponse.id} com status ${mpResponse.status}. Aguardando confirmação final via webhook.`);
         }
 
         await order.save();
@@ -206,7 +217,6 @@ export const payOrder = async (req, res, next) => {
         });
 
     } catch (err) {
-        console.error("Erro ao processar pagamento:", err?.cause || err.error || err);
         let message = 'Falha ao processar o pagamento.';
         const mpErrorMessage = err.cause?.error?.message || err.error?.message;
         if (mpErrorMessage) { message = `Erro do Mercado Pago: ${mpErrorMessage}`; }

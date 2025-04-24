@@ -28,15 +28,16 @@ export const createReview = async (req, res, next) => {
             return next(new AppError('Produto não encontrado.', 404));
         }
 
-        // 2. Verificar se o usuário comprou este produto
-        const hasPurchased = await Order.findOne({
-            user: userId,
-            'orderItems.productId': productId,
-            orderStatus: { $in: ['shipped', 'delivered'] }
-        });
-        if (!hasPurchased) {
-            return next(new AppError('Você só pode avaliar produtos que comprou.', 403));
-        }
+        // <<< IMPLANTAÇÂO FUTURA >>>
+        // // 2. Verificar se o usuário comprou este produto
+        // const hasPurchased = await Order.findOne({
+        //     user: userId,
+        //     'orderItems.productId': productId,
+        //     orderStatus: { $in: ['shipped', 'delivered'] }
+        // });
+        // if (!hasPurchased) {
+        //     return next(new AppError('Você só pode avaliar produtos que comprou.', 403));
+        // }
 
         // 3. Verificar se o usuário já avaliou este produto
         const existingReview = await Review.findOne({ product: productId, user: userId });
