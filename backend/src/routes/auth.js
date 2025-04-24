@@ -1,4 +1,4 @@
-// routes/auth.js
+//src/routes/auth.js
 import express from 'express';
 import { body } from 'express-validator';
 import { login, register } from '../controllers/auth.js';

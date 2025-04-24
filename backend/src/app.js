@@ -519,7 +519,7 @@ app.use(cors(corsOptions));
 app.use('/api/', apiLimiter);
 
 // Rota do Webhook
-// app.use('/api/webhooks', webhookRoutes); <<< COMENTADO DURANTE FASE DE TESTES DO PLANO B EM WEBHOOKS.JS
+app.use('/api/webhooks', webhookRoutes);
 
 // --- ROTA DE CONFIGURAÇÃO ---
 app.use('/api/config', configRoutes);
@@ -535,7 +535,6 @@ app.use('/api/categories', categoryRoutes);
 app.use('/api/addresses', addressRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/orders', orderRoutes);
-app.use('/api/webhooks', webhookRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/config', configRoutes);
 

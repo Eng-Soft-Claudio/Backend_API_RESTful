@@ -1,3 +1,4 @@
+//src/utils/__mocks__/cloudinary.js
 import { jest } from '@jest/globals';
 
 // Cria as funções mock que serão exportadas por este mock manual
