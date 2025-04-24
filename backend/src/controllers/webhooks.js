@@ -175,15 +175,6 @@ export const handleWebhook = async (req, res, next) => {
         // --- 1. VERIFICAÇÃO DE ASSINATURA ---
         const webhookSecret = process.env.MP_WEBHOOK_SECRET;
 
-        // ===============================================================
-        // ======================= INÍCIO PLANO B ========================
-        // ===============================================================
-        // A validação da assinatura HMAC está falhando consistentemente no Sandbox MP.
-        // Comente a validação abaixo e descomente o bloco "Processa sem verificação"
-        // TEMPORARIAMENTE para testar a lógica de atualização do pedido.
-        // !!! LEMBRE-SE DE REATIVAR A VALIDAÇÃO ANTES DA PRODUÇÃO !!!
-
-        /* <<< BLOCO DE VERIFICAÇÃO (COMENTADO PARA PLANO B) >>> */
         if (webhookSecret) {
             // Verifica se o corpo é Buffer (necessário para express.raw)
             if (!Buffer.isBuffer(req.body)) {
@@ -219,36 +210,10 @@ export const handleWebhook = async (req, res, next) => {
                 return res.status(400).send('Invalid request body.');
             }
         }
-        /* <<< FIM BLOCO DE VERIFICAÇÃO (COMENTADO PARA PLANO B) >>> */
 
-
-        // --- Bloco ATIVO para Plano B (Processa sem verificação) ---
-        // console.error("!!! ALERTA DE SEGURANÇA: VERIFICAÇÃO DE ASSINATURA DO WEBHOOK DESATIVADA !!!");
-        // try {
-        //     // Assume que express.json() global fez o parse (Remova/Comente express.raw na rota)
-        //     if (typeof req.body === 'object' && req.body !== null) {
-        //         notificationPayload = req.body;
-        //     } else {
-        //         // Se por acaso ainda vier como Buffer, tenta parsear
-        //         if (Buffer.isBuffer(req.body)) {
-        //             console.log("Webhook MP (Plano B): Recebido Buffer, tentando parsear JSON.");
-        //             notificationPayload = JSON.parse(req.body.toString());
-        //         } else {
-        //             throw new Error('Formato de corpo inesperado.');
-        //         }
-        //     }
-        // } catch (e) {
-        //     console.error("Webhook MP (Plano B): Erro ao obter/parsear corpo:", e);
-        //     return res.status(400).send('Invalid request body.');
-        // }
-        // ===============================================================
-        // ======================== FIM PLANO B ==========================
-        // ===============================================================
-        // --- FIM DA VERIFICAÇÃO/PARSING ---
 
         // --- 2. Processamento do Evento ---
         if (!notificationPayload) {
-            // Se chegou aqui, algo deu errado no parsing mesmo sem erro lançado
             throw new Error(
                 "Falha crítica ao obter payload da notificação após verificação/parsing."
             );
@@ -260,8 +225,8 @@ export const handleWebhook = async (req, res, next) => {
 
         // Extrair dados relevantes do PAYLOAD JSON (não mais da query)
         const eventType = notificationPayload?.type;
-        const paymentId = notificationPayload?.data?.id; // ID do pagamento DO CORPO JSON
-        initialPaymentIdLog = paymentId; // Atualiza para o log de erro final
+        const paymentId = notificationPayload?.data?.id;
+        initialPaymentIdLog = paymentId;
 
         if (eventType !== "payment" || !paymentId) {
             console.log(
@@ -347,7 +312,6 @@ export const handleWebhook = async (req, res, next) => {
                         : finalPaymentStatus === "cancelled"
                             ? "cancelled"
                             : "failed";
-                shouldUpdatePaymentResult = true;
                 // TODO: Retornar estoque se 'failed', 'cancelled', 'refunded', 'charged_back'?
             } else if (
                 ["pending", "in_process", "authorized"].includes(finalPaymentStatus)
@@ -379,7 +343,7 @@ export const handleWebhook = async (req, res, next) => {
                             paymentDetails?.date_last_updated || new Date().toISOString(),
                         email_address: paymentDetails?.payer?.email || null,
                         // Adiciona dados do cartão se disponíveis na resposta da API MP
-                        card_brand: paymentDetails?.payment_method_id, // ou paymentDetails?.card?.cardholder?.name?
+                        card_brand: paymentDetails?.payment_method_id, 
                         card_last_four: paymentDetails?.card?.last_four_digits,
                     };
                 }
