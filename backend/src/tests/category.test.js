@@ -5,16 +5,23 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import jwt from 'jsonwebtoken';
 import app from '../app.js';
 import Category from '../models/Category.js';
-import Product from '../models/Product.js'; // Necessário para testar deleção
+import Product from '../models/Product.js';
 import User from '../models/User.js';
 
 let mongoServer;
-let adminToken, userToken; // Tokens para admin e usuário normal
+let adminToken, userToken;
 let categoryId; // ID de uma categoria de teste
 
 beforeAll(async () => {
     mongoServer = await MongoMemoryServer.create();
-    await mongoose.connect(mongoServer.getUri());
+    const mongoUri = mongoServer.getUri();
+    await mongoose.connect(mongoUri);
+
+    // Garantir JWT_SECRET
+    if (!process.env.JWT_SECRET) {
+        process.env.JWT_SECRET = 'test-secret-for-category-please-replace';
+        console.warn('JWT_SECRET não definido, usando valor padrão para testes de category.');
+    }
 
     await User.deleteMany({});
     await Category.deleteMany({});
@@ -59,8 +66,8 @@ describe('/api/categories', () => {
 
             expect(res.body.name).toBe(categoryData.name);
             expect(res.body.description).toBe(categoryData.description);
-            expect(res.body.slug).toBe('eletronicos-novos'); 
-            categoryId = res.body._id; 
+            expect(res.body.slug).toBe('eletronicos-novos');
+            categoryId = res.body._id;
         });
 
         it('Deve retornar 409 se tentar criar categoria com nome duplicado', async () => {
@@ -74,41 +81,41 @@ describe('/api/categories', () => {
             await request(app)
                 .post('/api/categories')
                 .set('Authorization', `Bearer ${adminToken}`)
-                .send({ name: categoryData.name }) 
+                .send({ name: categoryData.name })
                 .expect(409);
         });
 
         it('Deve retornar 400 se o nome estiver faltando', async () => {
-             await request(app)
+            await request(app)
                 .post('/api/categories')
                 .set('Authorization', `Bearer ${adminToken}`)
-                .send({ description: 'Sem nome' }) 
+                .send({ description: 'Sem nome' })
                 .expect(400);
         });
 
-         it('Usuário normal NÃO deve criar categoria (403)', async () => {
-             await request(app)
+        it('Usuário normal NÃO deve criar categoria (403)', async () => {
+            await request(app)
                 .post('/api/categories')
                 .set('Authorization', `Bearer ${userToken}`)
                 .send(categoryData)
                 .expect(403);
-         });
+        });
 
-          it('Deve retornar 401 sem token', async () => {
-             await request(app)
+        it('Deve retornar 401 sem token', async () => {
+            await request(app)
                 .post('/api/categories')
                 .send(categoryData)
                 .expect(401);
-         });
+        });
     });
 
-     // --- Testes GET / ---
-     describe('GET /', () => {
+    // --- Testes GET / ---
+    describe('GET /', () => {
         it('Deve retornar lista de categorias', async () => {
-             await Category.create({ name: 'Roupas' });
-             await Category.create({ name: 'Calçados' });
+            await Category.create({ name: 'Roupas' });
+            await Category.create({ name: 'Calçados' });
 
-             const res = await request(app)
+            const res = await request(app)
                 .get('/api/categories')
                 .expect('Content-Type', /json/)
                 .expect(200);
@@ -119,151 +126,164 @@ describe('/api/categories', () => {
             expect(names).toEqual(expect.arrayContaining(['Roupas', 'Calçados']));
         });
 
-         it('Deve retornar lista vazia se não houver categorias', async () => {
-             const res = await request(app).get('/api/categories').expect(200);
-             expect(res.body).toHaveLength(0);
-         });
-         // Rota pública, não precisa testar 401/403 a menos que mude
-     });
+        it('Deve retornar lista vazia se não houver categorias', async () => {
+            const res = await request(app).get('/api/categories').expect(200);
+            expect(res.body).toHaveLength(0);
+        });
+        // Rota pública, não precisa testar 401/403 a menos que mude
+    });
 
-      // --- Testes GET /:id ---
-      describe('GET /:id', () => {
-          let testCat;
-          beforeEach(async () => {
-              testCat = await Category.create({ name: 'Teste Get ID' });
-          });
+    // --- Testes GET /:id ---
+    describe('GET /:id', () => {
+        let testCat;
+        beforeEach(async () => {
+            testCat = await Category.create({ name: 'Teste Get ID' });
+        });
 
-          it('Deve retornar uma categoria específica por ID', async () => {
-             const res = await request(app)
+        it('Deve retornar uma categoria específica por ID', async () => {
+            const res = await request(app)
                 .get(`/api/categories/${testCat._id}`)
                 .expect(200);
-             expect(res.body.name).toBe('Teste Get ID');
-             expect(res.body._id.toString()).toBe(testCat._id.toString());
-          });
+            expect(res.body.name).toBe('Teste Get ID');
+            expect(res.body._id.toString()).toBe(testCat._id.toString());
+        });
 
-          it('Deve retornar 404 se ID não existir', async () => {
-              const nonExistentId = new mongoose.Types.ObjectId();
-              await request(app).get(`/api/categories/${nonExistentId}`).expect(404);
-          });
+        it('Deve retornar 404 se ID não existir', async () => {
+            const nonExistentId = new mongoose.Types.ObjectId();
+            await request(app).get(`/api/categories/${nonExistentId}`).expect(404);
+        });
 
-          it('Deve retornar 400 se ID for inválido', async () => {
-              await request(app).get('/api/categories/invalid-id').expect(400);
-          });
-      });
+        it('Deve retornar 400 se ID for inválido', async () => {
+            await request(app).get('/api/categories/invalid-id').expect(400);
+        });
+    });
 
-      // --- Testes PUT /:id ---
-      describe('PUT /:id', () => {
-          let testCat;
-          const updateData = { name: 'Categoria Editada', description: 'Nova Desc' };
-          beforeEach(async () => {
-              testCat = await Category.create({ name: 'Original', description: 'Orig Desc' });
-          });
+    // --- Testes PUT /:id ---
+    describe('PUT /:id', () => {
+        let testCat;
+        const updateData = { name: 'Categoria Editada', description: 'Nova Desc' };
+        beforeEach(async () => {
+            testCat = await Category.create({ name: 'Original', description: 'Orig Desc' });
+        });
 
-           it('Admin deve atualizar categoria com sucesso', async () => {
-               const res = await request(app)
-                    .put(`/api/categories/${testCat._id}`)
-                    .set('Authorization', `Bearer ${adminToken}`)
-                    .send(updateData)
-                    .expect(200);
-                expect(res.body.name).toBe(updateData.name);
-                expect(res.body.description).toBe(updateData.description);
-                expect(res.body.slug).toBe('categoria-editada'); 
-           });
+        it('Admin deve atualizar categoria com sucesso', async () => {
+            const res = await request(app)
+                .put(`/api/categories/${testCat._id}`)
+                .set('Authorization', `Bearer ${adminToken}`)
+                .send(updateData)
+                .expect(200);
+            expect(res.body.name).toBe(updateData.name);
+            expect(res.body.description).toBe(updateData.description);
+            expect(res.body.slug).toBe('categoria-editada');
+        });
 
-            it('Usuário normal NÃO deve atualizar categoria (403)', async () => {
-               await request(app)
-                    .put(`/api/categories/${testCat._id}`)
-                    .set('Authorization', `Bearer ${userToken}`)
-                    .send(updateData)
-                    .expect(403);
-           });
+        it('Usuário normal NÃO deve atualizar categoria (403)', async () => {
+            await request(app)
+                .put(`/api/categories/${testCat._id}`)
+                .set('Authorization', `Bearer ${userToken}`)
+                .send(updateData)
+                .expect(403);
+        });
 
-            it('Deve retornar 404 se ID não existir', async () => {
-               const nonExistentId = new mongoose.Types.ObjectId();
-               await request(app)
-                    .put(`/api/categories/${nonExistentId}`)
-                    .set('Authorization', `Bearer ${adminToken}`)
-                    .send(updateData)
-                    .expect(404);
-           });
+        it('Deve retornar 404 se ID não existir', async () => {
+            const nonExistentId = new mongoose.Types.ObjectId();
+            await request(app)
+                .put(`/api/categories/${nonExistentId}`)
+                .set('Authorization', `Bearer ${adminToken}`)
+                .send(updateData)
+                .expect(404);
+        });
 
-             it('Deve retornar 400 se ID for inválido', async () => {
-               await request(app)
-                    .put('/api/categories/invalid-id')
-                     .set('Authorization', `Bearer ${adminToken}`)
-                    .send(updateData)
-                    .expect(400);
-           });
+        it('Deve retornar 400 se ID for inválido', async () => {
+            await request(app)
+                .put('/api/categories/invalid-id')
+                .set('Authorization', `Bearer ${adminToken}`)
+                .send(updateData)
+                .expect(400);
+        });
 
-            it('Deve retornar 400 se dados forem inválidos (nome vazio)', async () => {
-                 await request(app)
-                    .put(`/api/categories/${testCat._id}`)
-                     .set('Authorization', `Bearer ${adminToken}`)
-                    .send({ name: '' }) 
-                    .expect(400);
+        it('Deve retornar 400 se dados forem inválidos (nome vazio)', async () => {
+            await request(app)
+                .put(`/api/categories/${testCat._id}`)
+                .set('Authorization', `Bearer ${adminToken}`)
+                .send({ name: '' })
+                .expect(400);
+        });
+
+        it('Deve retornar 409 se tentar atualizar para nome duplicado', async () => {
+            await Category.create({ name: 'Nome Existente' });
+            await request(app)
+                .put(`/api/categories/${testCat._id}`)
+                .set('Authorization', `Bearer ${adminToken}`)
+                .send({ name: 'Nome Existente' })
+                .expect(409);
+        });
+    });
+
+    // --- Testes DELETE /:id ---
+    describe('DELETE /:id', () => {
+        let catToDelete, catWithProduct;
+        let productInCategory;
+
+        beforeEach(async () => {
+            catToDelete = await Category.create({ name: 'Para Deletar' });
+            catWithProduct = await Category.create({ name: 'Com Produto' });
+            productInCategory = await Product.create({
+                name: 'Produto Associado',
+                price: 10,
+                category: catWithProduct._id,
+                image: 'assoc.jpg',
+                stock: 1
             });
-      });
+        });
 
-      // --- Testes DELETE /:id ---
-      describe('DELETE /:id', () => {
-           let catToDelete, catWithProduct;
-           let productInCategory;
+        it('Admin deve deletar categoria VAZIA com sucesso', async () => {
+            await request(app)
+                .delete(`/api/categories/${catToDelete._id}`)
+                .set('Authorization', `Bearer ${adminToken}`)
+                .expect(200);
 
-           beforeEach(async () => {
-               catToDelete = await Category.create({ name: 'Para Deletar' });
-               catWithProduct = await Category.create({ name: 'Com Produto' });
-               productInCategory = await Product.create({
-                   name: 'Produto Associado',
-                   price: 10,
-                   category: catWithProduct._id, 
-                   image: 'assoc.jpg',
-                   stock: 1
-               });
-           });
+            const deleted = await Category.findById(catToDelete._id);
+            expect(deleted).toBeNull();
+        });
 
-            it('Admin deve deletar categoria VAZIA com sucesso', async () => {
-                 await request(app)
-                    .delete(`/api/categories/${catToDelete._id}`)
-                    .set('Authorization', `Bearer ${adminToken}`)
-                    .expect(200); 
+        it('Admin NÃO deve conseguir deletar categoria COM produtos associados (400)', async () => {
+            const res = await request(app)
+                .delete(`/api/categories/${catWithProduct._id}`)
+                .set('Authorization', `Bearer ${adminToken}`)
+                .expect(400);
+            expect(res.body.message).toMatch(/Não é possível deletar. Existem \d+ produto\(s\) nesta categoria/i);
 
-                const deleted = await Category.findById(catToDelete._id);
-                expect(deleted).toBeNull();
-            });
+            // Verifica se a categoria ainda existe
+            const notDeleted = await Category.findById(catWithProduct._id);
+            expect(notDeleted).not.toBeNull();
+            // Verifica se o produto ainda existe no DB
+            const prodExists = await Product.findById(productInCategory._id);
+            expect(prodExists).not.toBeNull();
+        });
 
-             it('Admin NÃO deve conseguir deletar categoria COM produtos associados (400)', async () => {
-                 const res = await request(app)
-                    .delete(`/api/categories/${catWithProduct._id}`)
-                    .set('Authorization', `Bearer ${adminToken}`)
-                    .expect(400);
-                 expect(res.body.message).toMatch(/Não é possível deletar. Existem \d+ produto\(s\) nesta categoria/i);
 
-                 // Verifica se a categoria ainda existe
-                 const notDeleted = await Category.findById(catWithProduct._id);
-                 expect(notDeleted).not.toBeNull();
-            });
+        it('Usuário normal NÃO deve deletar categoria (403)', async () => {
+            await request(app)
+                .delete(`/api/categories/${catToDelete._id}`)
+                .set('Authorization', `Bearer ${userToken}`)
+                .expect(403);
+        });
 
-             it('Usuário normal NÃO deve deletar categoria (403)', async () => {
-                await request(app)
-                    .delete(`/api/categories/${catToDelete._id}`)
-                    .set('Authorization', `Bearer ${userToken}`)
-                    .expect(403);
-            });
+        it('Deve retornar 404 se ID não existir', async () => {
+            const nonExistentId = new mongoose.Types.ObjectId();
+            await request(app)
+                .delete(`/api/categories/${nonExistentId}`)
+                .set('Authorization', `Bearer ${adminToken}`)
+                .expect(404);
+        });
 
-             it('Deve retornar 404 se ID não existir', async () => {
-                const nonExistentId = new mongoose.Types.ObjectId();
-                await request(app)
-                     .delete(`/api/categories/${nonExistentId}`)
-                     .set('Authorization', `Bearer ${adminToken}`)
-                     .expect(404);
-            });
-
-              it('Deve retornar 400 se ID for inválido', async () => {
-                await request(app)
-                     .delete('/api/categories/invalid-id')
-                      .set('Authorization', `Bearer ${adminToken}`)
-                     .expect(400);
-            });
-      });
+        it('Deve retornar 400 se ID for inválido', async () => {
+            await request(app)
+                .delete('/api/categories/invalid-id')
+                .set('Authorization', `Bearer ${adminToken}`)
+                .expect(400);
+        });
+    });
 
 });

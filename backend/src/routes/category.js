@@ -1,14 +1,14 @@
 // src/routes/category.js
 import express from 'express';
 import { body, param } from 'express-validator';
-import { authenticate, isAdmin } from '../middleware/auth.js'; 
+import { authenticate, isAdmin } from '../middleware/auth.js';
 import {
     createCategory,
     getCategories,
     getCategoryById,
     updateCategory,
     deleteCategory
-} from '../controllers/category.js'; 
+} from '../controllers/category.js';
 
 const router = express.Router();
 
@@ -17,7 +17,6 @@ const categoryValidationRules = [
     body('name', 'Nome da categoria é obrigatório').trim().notEmpty(),
     body('description', 'Descrição inválida').optional().trim()
 ];
-
 const idValidationRule = [
     param('id', 'ID de categoria inválido').isMongoId()
 ];
@@ -26,56 +25,44 @@ const idValidationRule = [
 
 /**
  * @swagger
+ * tags:
+ *   name: Categories
+ *   description: Gerenciamento de categorias de produtos.
+ */
+
+/**
+ * @swagger
  * /api/categories:
  *   post:
- *     summary: Cria uma nova categoria.
+ *     summary: Cria uma nova categoria (Admin).
  *     tags: [Categories]
- *     description: Cria uma nova categoria de produto. Apenas administradores podem criar categorias.
  *     security:
- *       - bearerAuth: [] # Indica que requer autenticação JWT Bearer
+ *       - bearerAuth: [] # Requer Admin
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/CategoryInput' # Schema para criar categoria
+ *             $ref: '#/components/schemas/CategoryInput'
  *     responses:
  *       '201':
- *         description: Categoria criada com sucesso.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/CategoryOutput' # Retorna a categoria criada
+ *         description: Categoria criada.
+ *         content: { application/json: { schema: { $ref: '#/components/schemas/CategoryOutput' }}}
  *       '400':
- *         description: Erro de validação (ex: nome faltando).
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorValidationResponse'
+ *         description: Erro de validação.
+ *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorValidationResponse' }}}
  *       '401':
- *         description: Não autorizado (token inválido ou ausente).
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *         description: Não autorizado.
+ *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' }}}
  *       '403':
- *         description: Acesso proibido (usuário não é admin).
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *         description: Acesso proibido (não é admin).
+ *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' }}}
  *       '409':
- *         description: Conflito (categoria com este nome/slug já existe).
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *         description: Conflito (nome/slug já existe).
+ *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' }}}
  *       '500':
- *         description: Erro interno do servidor.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *         description: Erro interno.
+ *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' }}}
  */
 router.post('/', authenticate, isAdmin, categoryValidationRules, createCategory);
 
@@ -85,26 +72,21 @@ router.post('/', authenticate, isAdmin, categoryValidationRules, createCategory)
  *   get:
  *     summary: Lista todas as categorias.
  *     tags: [Categories]
- *     description: Retorna uma lista de todas as categorias cadastradas, ordenadas por nome. Esta rota pode ser pública ou exigir autenticação dependendo da sua necessidade (atualmente pública).
- *     security:
- *       - bearerAuth: [] # Indica que requer autenticação JWT Bearer
+ *     security: [] # MARCAÇÃO CORRIGIDA: Endpoint público
  *     responses:
  *       '200':
- *         description: Lista de categorias obtida com sucesso.
+ *         description: Lista de categorias.
  *         content:
  *           application/json:
  *             schema:
  *               type: array
  *               items:
- *                 $ref: '#/components/schemas/CategoryOutput' # Lista de categorias
+ *                 $ref: '#/components/schemas/CategoryOutput'
  *       '500':
- *         description: Erro interno do servidor.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *         description: Erro interno.
+ *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' }}}
  */
-router.get('/', getCategories); 
+router.get('/', getCategories);
 
 /**
  * @swagger
@@ -112,42 +94,22 @@ router.get('/', getCategories);
  *   get:
  *     summary: Obtém uma categoria específica por ID.
  *     tags: [Categories]
- *     description: Retorna os detalhes de uma categoria específica usando seu ID MongoDB.
- *     security: [] 
+ *     security: [] # MARCAÇÃO CORRIGIDA: Endpoint público
  *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: objectid
- *         description: O ID MongoDB da categoria a ser obtida.
- *         example: 6801350d65d4d9e110605dbaf
+ *       - $ref: '#/components/parameters/CategoryIdParam' # USA PARÂMETRO CENTRALIZADO
  *     responses:
  *       '200':
  *         description: Detalhes da categoria.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/CategoryOutput'
+ *         content: { application/json: { schema: { $ref: '#/components/schemas/CategoryOutput' }}}
  *       '400':
- *         description: ID inválido (não é um ObjectId válido).
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorValidationResponse' # Erro da validação 'idValidationRule'
+ *         description: ID inválido.
+ *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorValidationResponse' }}}
  *       '404':
  *         description: Categoria não encontrada.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' }}}
  *       '500':
- *         description: Erro interno do servidor.
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *         description: Erro interno.
+ *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' }}}
  */
 router.get('/:id', idValidationRule, getCategoryById);
 
@@ -155,28 +117,21 @@ router.get('/:id', idValidationRule, getCategoryById);
  * @swagger
  * /api/categories/{id}:
  *   put:
- *     summary: Atualiza uma categoria existente.
+ *     summary: Atualiza uma categoria existente (Admin).
  *     tags: [Categories]
- *     description: Atualiza o nome e/ou descrição de uma categoria existente. Apenas administradores.
  *     security:
- *       - bearerAuth: [] # Requer token JWT
+ *       - bearerAuth: [] # Requer Admin
  *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: objectid
- *         description: O ID MongoDB da categoria a ser atualizada.
+ *       - $ref: '#/components/parameters/CategoryIdParam'
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/CategoryInput' # Usa o mesmo schema da criação
+ *             $ref: '#/components/schemas/CategoryInput'
  *     responses:
  *       '200':
- *         description: Categoria atualizada com sucesso.
+ *         description: Categoria atualizada.
  *         content:
  *           application/json:
  *             schema:
@@ -225,23 +180,15 @@ router.put('/:id', authenticate, isAdmin, idValidationRule, categoryValidationRu
  * @swagger
  * /api/categories/{id}:
  *   delete:
- *     summary: Deleta uma categoria.
+ *     summary: Deleta uma categoria (Admin).
  *     tags: [Categories]
- *     description: Remove uma categoria do sistema. Apenas administradores. A operação falhará se houver produtos associados a esta categoria.
  *     security:
- *       - bearerAuth: [] # Requer token JWT
+ *       - bearerAuth: [] # Requer Admin
  *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: objectid
- *         description: O ID MongoDB da categoria a ser deletada.
+ *       - $ref: '#/components/parameters/CategoryIdParam'
  *     responses:
  *       '200':
- *         description: Categoria deletada com sucesso.
- *         content:
+ *         description: Categoria deletada.
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/SuccessResponse' # Usa resposta de sucesso genérica

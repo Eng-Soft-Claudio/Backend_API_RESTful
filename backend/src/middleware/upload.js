@@ -3,7 +3,7 @@ import multer from 'multer';
 
 
 // Configuração do armazenamento
-const storage = multer.diskStorage({
+const storage = multer.memoryStorage({
   filename: (req, file, cb) => {
     cb(null, `${Date.now()}-${file.originalname}`);
   }
@@ -15,7 +15,7 @@ const fileFilter = (req, file, cb) => {
   if (allowedMimes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Tipo de arquivo não suportado!'), false);
+    cb(new AppError('Tipo de arquivo não suportado!', 400));
   }
 };
 

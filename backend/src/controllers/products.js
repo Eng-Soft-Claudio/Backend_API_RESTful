@@ -102,7 +102,7 @@ export const getProducts = async (req, res, next) => {
             Product.countDocuments(filterQuery)
         ]);
 
-        const totalPages = Math.ceil(totalProducts / limit);
+        const totalPages = parseInt(page);
 
         res.status(200).json({
             status: 'success',

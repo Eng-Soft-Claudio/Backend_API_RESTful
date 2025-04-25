@@ -17,7 +17,7 @@ const router = express.Router();
 router.use(authenticate);
 
 // --- Regras de Validação para CRIAÇÃO (POST) ---
-const createAddressValidationRules = [ 
+const createAddressValidationRules = [
     body('label', 'Rótulo inválido (máx 50 caracteres)').optional().trim().isLength({ max: 50 }),
     body('street', 'Nome da rua/logradouro é obrigatório (máx 200 caracteres)').trim().notEmpty().isLength({ max: 200 }),
     body('number', 'Número é obrigatório (máx 20 caracteres)').trim().notEmpty().isLength({ max: 20 }),
@@ -34,9 +34,9 @@ const createAddressValidationRules = [
 // --- Regras de Validação para ATUALIZAÇÃO (PUT) ---
 const updateAddressValidationRules = [
     body('label', 'Rótulo inválido (máx 50 caracteres)').optional().trim().isLength({ max: 50 }),
-    body('street', 'Nome da rua/logradouro inválido (máx 200 caracteres)').optional().trim().notEmpty().isLength({ max: 200 }), 
+    body('street', 'Nome da rua/logradouro inválido (máx 200 caracteres)').optional().trim().notEmpty().isLength({ max: 200 }),
     body('number', 'Número inválido (máx 20 caracteres)').optional().trim().notEmpty().isLength({ max: 20 }),
-    body('complement', 'Complemento inválido (máx 100 caracteres)').optional({ nullable: true }).trim().isLength({ max: 100 }), 
+    body('complement', 'Complemento inválido (máx 100 caracteres)').optional({ nullable: true }).trim().isLength({ max: 100 }),
     body('neighborhood', 'Bairro inválido (máx 100 caracteres)').optional().trim().notEmpty().isLength({ max: 100 }),
     body('city', 'Cidade inválida (máx 100 caracteres)').optional().trim().notEmpty().isLength({ max: 100 }),
     body('state', 'Estado (UF) inválido (2 caracteres)').optional().trim().notEmpty().isLength({ min: 2, max: 2 }).toUpperCase(),
@@ -45,7 +45,6 @@ const updateAddressValidationRules = [
     body('phone', 'Telefone inválido (máx 20 caracteres)').optional({ nullable: true }).trim().isLength({ max: 20 }),
     body('isDefault', 'Valor inválido para isDefault (deve ser true ou false)').optional().isBoolean().toBoolean()
 ];
-
 const mongoIdValidation = (paramName = 'id') => [
     param(paramName, `ID inválido para ${paramName}`).isMongoId()
 ];
@@ -250,7 +249,7 @@ router.get(
 router.put(
     '/:id',
     mongoIdValidation('id'),
-    updateAddressValidationRules, // Valida os campos que forem enviados
+    updateAddressValidationRules,
     updateMyAddress
 );
 

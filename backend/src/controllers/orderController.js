@@ -9,6 +9,29 @@ import mongoose from 'mongoose';
 import mpClient, { Payment, isMercadoPagoConfigured } from '../config/mercadopago.js';
 import User from '../models/User.js';
 
+// --- FUNÇÃO AUXILIAR PARA RETORNAR ESTOQUE ---
+async function returnStockForOrderItems(orderItems, sessionOptions = {}) {
+    if (!orderItems || orderItems.length === 0) {
+        return;
+    }
+    console.log(`Tentando retornar estoque para ${orderItems.length} itens.`);
+    try {
+        const stockUpdates = orderItems.map(item => ({
+            updateOne: {
+                filter: { _id: item.productId },
+                // Apenas incrementa o estoque
+                update: { $inc: { stock: item.quantity } },
+            }
+        }));
+        // Executa todas as atualizações de estoque em lote
+        await Product.bulkWrite(stockUpdates, sessionOptions);
+        console.log(`Estoque retornado com sucesso para ${orderItems.length} itens.`);
+    } catch (stockErr) {
+        console.error("!!! ERRO CRÍTICO AO RETORNAR ESTOQUE !!!:", stockErr);
+        // Considerar adicionar a um log/fila para retentativa manual/automática
+    }
+}
+
 /**
  * @description Cria um novo pedido com status 'pending_payment'.
  *              Não interage mais com o gateway de pagamento nesta etapa.
@@ -74,7 +97,7 @@ export const createOrder = async (req, res, next) => {
 
         if (orderItems.length === 0) {
             if (session) { await session.abortTransaction(); session.endSession(); }
-            return next(new AppError(`Problemas de estoque: ${stockErrors.join('; ')}`, 400));
+            return next(new AppError('Nenhum item válido para criar o pedido devido a problemas de estoque.', 400));
         }
 
         const shippingPrice = itemsPrice > 100 ? 0 : 10;
@@ -106,18 +129,26 @@ export const createOrder = async (req, res, next) => {
         const createdOrderArray = await Order.create([orderData], sessionOptions);
         const createdOrder = createdOrderArray[0];
 
-        // Decrementar Estoque (Mantém aqui)
+        // --- Decrementar Estoque ---
         for (const item of createdOrder.orderItems) {
             await Product.findByIdAndUpdate(item.productId, { $inc: { stock: -item.quantity } }, sessionOptions);
+            const productUpdateResult = await Product.findByIdAndUpdate(
+                item.productId,
+                { $inc: { stock: -item.quantity } },
+                { ...sessionOptions, new: true }
+            );
+            if (!productUpdateResult) throw new Error(`Produto ${item.productId} não encontrado durante decremento de estoque.`);
+            if (productUpdateResult.stock < 0) throw new Error(`Estoque negativo para ${item.productId} após decremento.`);
         }
 
-        // Limpar o Carrinho (Mantém aqui)
+        // --- Limpar o Carrinho ---
         cart.items = [];
         await cart.save(sessionOptions);
 
+        // --- Commit da Transação ---
         if (session) { await session.commitTransaction(); session.endSession(); }
 
-        // Retorna o pedido criado (frontend usará o ID para iniciar o pagamento)
+        // --- Resposta ---
         res.status(201).json({
             status: 'success',
             data: {
@@ -126,9 +157,12 @@ export const createOrder = async (req, res, next) => {
         });
 
     } catch (err) {
-        if (session) { /* ... abort transaction ... */ }
+        // --- Rollback da Transação ---
+        if (session) {
+            try { await session.abortTransaction(); session.endSession(); } catch (abortErr) { console.error("Erro ao abortar transação:", abortErr); }
+        }
         console.error("Erro ao criar pedido:", err);
-        next(new AppError('Não foi possível criar o pedido...', 500));
+        next(err);
     }
 };
 
@@ -144,70 +178,65 @@ export const payOrder = async (req, res, next) => {
 
     const orderId = req.params.id;
     const userId = req.user.id;
-    // Dados recebidos do frontend (SDK JS V2 do MP)
     const { token, payment_method_id, issuer_id, installments, payer } = req.body;
+
+    let order;
 
     try {
         if (!isMercadoPagoConfigured() || !mpClient) { /* ... erro config SDK ... */ }
 
-        const order = await Order.findOne({ _id: orderId, user: userId });
+        order = await Order.findOne({ _id: orderId, user: userId });
         if (!order) { return next(new AppError('Pedido não encontrado ou não pertence a você.', 404)); }
         if (order.orderStatus !== 'pending_payment') { return next(new AppError(`Pedido não pode ser pago (Status: ${order.orderStatus}).`, 400)); }
         if (order.mercadopagoPaymentId) {
             return next(new AppError(`Pagamento para este pedido já foi iniciado ou processado.`, 400));
         }
 
-        // Montar corpo para a API de Pagamentos V1 do MP
+        // --- Interação com Mercado Pago ---
         const paymentData = {
-            transaction_amount: order.totalPrice,
-            token: token,
-            description: `Pedido #${order._id.toString().slice(-6)} - E-commerce`,
-            installments: installments,
-            payment_method_id: payment_method_id,
+            transaction_amount: 'string',
+            token: 'string',
+            description: 'string',
+            installments: number,
+            payment_method_id: 'string',
+            issuer_id: 'string' || null,
             payer: {
-                email: payer.email,
-                // identification: { type: payer.identification?.type, number: payer.identification?.number }
-            },
-            external_reference: order._id.toString(),
-            notification_url: process.env.MERCADOPAGO_WEBHOOK_URL
-        };
-
-        if (issuer_id) {
-            paymentData.issuer_id = issuer_id;
-        }
-
+              email: 'string',
+              identification: {
+                type: 'string',
+                number: 'string'
+              }
+            }
+          };
         const payment = new Payment(mpClient);
         const mpResponse = await payment.create({ body: paymentData });
 
-        // Analisar a resposta SÍNCRONA do MP
+        // --- Processamento da Resposta Síncrona MP ---
         if (!mpResponse || !mpResponse.id || !mpResponse.status) {
             return next(new AppError('Falha ao processar pagamento junto ao Mercado Pago (resposta inválida).', 502));
         }
 
-        // Atualizar pedido com base na resposta síncrona
+        // --- Atualizar pedido com dados do MP ---
         order.mercadopagoPaymentId = mpResponse.id.toString();
-        order.paymentResult = {
-            id: mpResponse.id.toString(),
-            status: mpResponse.status,
-            update_time: mpResponse.date_last_updated || new Date().toISOString(),
-            email_address: mpResponse.payer?.email || null,
-            card_brand: mpResponse.payment_method_id,
-            card_last_four: mpResponse.card?.last_four_digits || null
-        };
+        order.paymentResult = { /* ... preencher com dados mpResponse ... */ };
         order.installments = mpResponse.installments || 1;
 
-        // Atualiza status do pedido local
+        const paymentFailed = ['rejected', 'cancelled', 'failed', 'charged_back'].includes(mpResponse.status);
+
+        // --- Atualiza status do pedido local ---
         if (mpResponse.status === 'approved') {
-            order.orderStatus = 'processing';
+            order.orderStatus = 'processing'; // Ou 'paid' dependendo da regra de negócio
             order.paidAt = new Date();
-        } else if (['rejected', 'cancelled', 'failed', 'charged_back'].includes(mpResponse.status)) {
+        } else if (paymentFailed) {
             order.orderStatus = 'failed';
-            // Considerar retornar estoque aqui se o pagamento for rejeitado imediatamente?
+            // ----> INÍCIO: Lógica para retornar estoque em caso de falha SÍNCRONA <----
+            console.log(`Pagamento SÍNCRONO falhou para pedido ${order._id} (Status MP: ${mpResponse.status}). Tentando retornar estoque...`);
+            await returnStockForOrderItems(order.orderItems);
+            order.paymentResult.status = mpResponse.status;
         }
 
         await order.save();
 
-        // Retorna sucesso para o frontend, incluindo o status atual do pedido/pagamento
         res.status(200).json({
             status: 'success',
             message: `Pagamento processado com status: ${mpResponse.status}`,
@@ -217,6 +246,7 @@ export const payOrder = async (req, res, next) => {
         });
 
     } catch (err) {
+        console.error(`Erro no processamento de pagamento para pedido ${orderId}:`, err);
         let message = 'Falha ao processar o pagamento.';
         const mpErrorMessage = err.cause?.error?.message || err.error?.message;
         if (mpErrorMessage) { message = `Erro do Mercado Pago: ${mpErrorMessage}`; }
@@ -295,3 +325,5 @@ export const getOrderById = async (req, res, next) => {
         next(err);
     }
 };
+
+export { returnStockForOrderItems };
