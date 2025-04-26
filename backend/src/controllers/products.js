@@ -61,7 +61,10 @@ export const getProducts = async (req, res, next) => {
 
     try {
         const { page = 1, limit = 10, q, category: categoryIdentifier, sort } = req.query;
+        const currentPageNum = parseInt(page) || 1;
+        const limitNum = parseInt(limit) || 10;
         const filterQuery = {};
+        
 
         if (categoryIdentifier) {
             let foundCategory = await Category.findOne({
@@ -80,7 +83,7 @@ export const getProducts = async (req, res, next) => {
                     products: [],
                     message: "Categoria não encontrada",
                     totalPages: 0,
-                    currentPage: page,
+                    currentPage: currentPageNum,
                     totalProducts: 0
                 });;
             }
@@ -96,20 +99,20 @@ export const getProducts = async (req, res, next) => {
             Product.find(filterQuery)
                 .populate('category', 'name slug')
                 .sort(sortOptions)
-                .limit(limit)
-                .skip((page - 1) * limit)
+                .limit(limitNum)
+                .skip((currentPageNum - 1) * limitNum)
                 .lean(),
             Product.countDocuments(filterQuery)
         ]);
 
-        const totalPages = parseInt(page);
+        const totalPages = Math.ceil(totalProducts / limitNum);
 
         res.status(200).json({
             status: 'success',
             results: products.length,
             totalProducts: totalProducts,
             totalPages: totalPages,
-            currentPage: page,
+            currentPage: currentPageNum,
             products,
         });
 
@@ -146,7 +149,7 @@ export const updateProduct = async (req, res, next) => {
                 try {
                     await deleteImage(oldPublicId);
                 } catch (cloudinaryErr) {
-                    console.error(`Falha ao deletar imagem antiga ${oldPublicId} do Cloudinary durante update:`, cloudinaryErr.message);
+                    return next(new AppError('Falha ao deletar imagem antiga.', 404));
                 }
             }
             const result = await uploadImage(req.file.path);
@@ -169,13 +172,12 @@ export const updateProduct = async (req, res, next) => {
         ).populate('category', 'name slug');
 
         if (!product) {
-            return next(new AppError('Produto não encontrado após tentativa de update.', 404)); // Pouco provável
+            return next(new AppError('Produto não encontrado após tentativa de update.', 404));
         }
 
         res.status(200).json(product);
 
     } catch (err) {
-        console.error("ERRO NO CATCH de updateProduct:", err);
         next(err);
     }
 };

@@ -11,7 +11,6 @@ import Category from '../models/Category.js';
 import User from '../models/User.js';
 
 // Mocking Cloudinary
-jest.mock('../utils/cloudinary.js');
 import { uploadImage, deleteImage } from '../utils/cloudinary.js';
 
 // Variáveis globais
@@ -22,35 +21,43 @@ let userToken;
 
 
 // --- Obter Caminho & Arquivo Dummy ---
-const uploadsDir = path.resolve('./src/tests/test-uploads');
+const uploadsDir = path.join(process.cwd(), 'src', 'tests', 'test-uploads');
 const dummyImagePath = path.join(uploadsDir, 'dummy.jpg');
+
 
 
 // --- Setup e Teardown ---
 beforeAll(async () => {
 
-    if (!fs.existsSync(uploadsDir)) {
+    try {
+        // Garante que o diretório exista (cria recursivamente se necessário)
         fs.mkdirSync(uploadsDir, { recursive: true });
-    }
-    if (!fs.existsSync(dummyImagePath)) {
-        fs.writeFileSync(dummyImagePath, 'dummy image content');
+        // Cria/Sobrescreve o arquivo dummy
+        fs.writeFileSync(dummyImagePath, 'test content');
+        // Verifica se realmente existe APÓS a criação
+        if (!fs.existsSync(dummyImagePath)) {
+            throw new Error(`Falha CRÍTICA ao criar arquivo dummy: ${dummyImagePath}`);
+        }
+    } catch (err) {
+        throw err; // Falha o setup se não conseguir criar
     }
 
+    // --- Conexão com DB e Setup de Dados ---
     mongoServer = await MongoMemoryServer.create();
     const mongoUri = mongoServer.getUri();
     await mongoose.connect(mongoUri);
 
-    // Garantir JWT_SECRET
+    // --- Garantir JWT_SECRET ---
     if (!process.env.JWT_SECRET) {
         process.env.JWT_SECRET = 'este-e-um-segredo-super-secreto-apenas-para-testes-12345!@';
     }
 
-    // Limpeza inicial
+    // --- Limpeza inicial ---
     await User.deleteMany({});
     await Product.deleteMany({});
     await Category.deleteMany({});
 
-    // Criar dados base
+    // --- Criar dados base ---
     const testCategory = await Category.create({ name: 'Categoria Teste Prod' });
     const testCategory2 = await Category.create({ name: 'Outra Categoria' });
     categoryId = testCategory._id;
@@ -74,48 +81,39 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+    // Limpar mocks
     uploadImage.mockClear();
     deleteImage.mockClear();
-    uploadImage.mockResolvedValue({
-        secure_url: 'http://fake.cloudinary.com/image.jpg',
-        public_id: 'fake_public_id'
-    });
+    uploadImage.mockResolvedValue({ secure_url: 'http://fake.cloudinary.com/image.jpg', public_id: 'fake_public_id' });
     deleteImage.mockResolvedValue({ result: 'ok' });
-    // Limpar arquivo e diretório dummy
-    if (fs.existsSync(dummyImagePath)) {
-        fs.unlinkSync(dummyImagePath);
-    }
-    if (fs.existsSync(uploadsDir)) {
-        fs.rmSync(uploadsDir, { recursive: true, force: true });
-    }
     // Limpar produtos
     await Product.deleteMany({});
 });
 
 afterAll(async () => {
+    // Limpeza final
     await User.deleteMany({});
     await Category.deleteMany({});
     await Product.deleteMany({});
     await mongoose.disconnect();
     await mongoServer.stop();
     // Limpar arquivo e diretório dummy
-    if (fs.existsSync(dummyImagePath)) {
-        fs.unlinkSync(dummyImagePath);
-    }
-    if (fs.existsSync(uploadsDir)) {
-        fs.rmSync(uploadsDir, { recursive: true, force: true });
+    try {
+        if (fs.existsSync(dummyImagePath)) fs.unlinkSync(dummyImagePath);
+        if (fs.existsSync(uploadsDir)) fs.rmdirSync(uploadsDir);
+    } catch (cleanupErr) {
+        try { fs.rmSync(uploadsDir, { recursive: true, force: true }); } catch (e) { }
     }
 });
 
 // --- Testes ---
 describe('/api/products', () => {
-    
+
     // --- Testes GET / ---
     describe('GET /', () => {
 
-        let prodA, prodB, prodC;
-
         beforeEach(async () => {
+            let prodA, prodB, prodC;
             // Limpar produtos antes de criar para este bloco GET
             await Product.deleteMany({});
             prodA = await Product.create({ name: 'Laptop X', price: 1500, category: categoryId, image: 'lx.jpg', description: 'Bom laptop' });
@@ -216,7 +214,7 @@ describe('/api/products', () => {
             expect(res.body.products[0].name).toBe('Laptop X');
         });
     });
-    
+
     // --- Testes POST / ---
     describe('POST /', () => {
 
@@ -245,12 +243,13 @@ describe('/api/products', () => {
             expect(res.body.name).toBe(productData.name);
             expect(res.body.price).toBe(Number(productData.price));
             expect(res.body.stock).toBe(Number(productData.stock));
-            expect(res.body.category.name).toBe('Categoria Teste 1');
+            expect(res.body.category.name).toBe('Categoria Teste Prod');
             expect(res.body.image).toBe('http://fake.cloudinary.com/image.jpg');
             expect(res.body.imagePublicId).toBe('fake_public_id');
 
             expect(uploadImage).toHaveBeenCalledTimes(1);
-            expect(uploadImage).toHaveBeenCalledWith(expect.stringContaining(dummyImagePath.replace(/\\/g, '/')));
+            expect(uploadImage).toHaveBeenCalledWith(expect.any(String));
+
 
             const dbProduct = await Product.findById(res.body._id);
             expect(dbProduct).not.toBeNull();

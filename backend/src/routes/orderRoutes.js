@@ -43,7 +43,9 @@ const payOrderValidationRules = [
     body('installments', 'Número de parcelas é obrigatório').isInt({ min: 1 }).toInt(),
     body('payer', 'Informações do pagador são obrigatórias').isObject(),
     body('payer.email', 'Email do pagador é obrigatório').isEmail().normalizeEmail(),
-    body('issuer_id', 'ID do emissor (banco) é opcional').optional().trim() 
+    body('issuer_id', 'ID do emissor (banco) é opcional').optional().trim() ,
+    body('payer.identification.type', 'Tipo de identificação do pagador é obrigatório').optional().trim().notEmpty(),
+    body('payer.identification.number', 'Número de identificação do pagador é obrigatório').optional().trim().notEmpty(),
 ];
 
 

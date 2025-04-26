@@ -171,3 +171,6 @@ dist
 # Ignore all local history of files
 .history
 .ionide
+
+#Uploads Images from Jest Tests
+uploads_temp

@@ -1,35 +1,45 @@
 //src/controllers/orderController.js
-import Order from '../models/Order.js';
-import Cart from '../models/Cart.js';
-import Product from '../models/Product.js';
-import Address from '../models/Address.js';
-import AppError from '../utils/appError.js';
-import { validationResult } from 'express-validator';
-import mongoose from 'mongoose';
-import mpClient, { Payment, isMercadoPagoConfigured } from '../config/mercadopago.js';
-import User from '../models/User.js';
+import Order from "../models/Order.js";
+import Cart from "../models/Cart.js";
+import Product from "../models/Product.js";
+import Address from "../models/Address.js";
+import AppError from "../utils/appError.js";
+import { validationResult } from "express-validator";
+import mongoose from "mongoose";
+import mpClient, {
+  Payment,
+  isMercadoPagoConfigured,
+} from "../config/mercadopago.js";
 
 // --- FUNÇÃO AUXILIAR PARA RETORNAR ESTOQUE ---
 async function returnStockForOrderItems(orderItems, sessionOptions = {}) {
-    if (!orderItems || orderItems.length === 0) {
-        return;
+  if (!orderItems || orderItems.length === 0) {
+    return;
+  }
+  try {
+    const stockUpdates = orderItems
+      .map((item) => {
+        if (!item.productId || !item.quantity || item.quantity <= 0) {
+          return null;
+        }
+        return {
+          updateOne: {
+            filter: { _id: item.productId },
+            update: { $inc: { stock: item.quantity } },
+          },
+        };
+      })
+      .filter(Boolean);
+
+    if (stockUpdates.length === 0) {
+      return;
     }
-    console.log(`Tentando retornar estoque para ${orderItems.length} itens.`);
-    try {
-        const stockUpdates = orderItems.map(item => ({
-            updateOne: {
-                filter: { _id: item.productId },
-                // Apenas incrementa o estoque
-                update: { $inc: { stock: item.quantity } },
-            }
-        }));
-        // Executa todas as atualizações de estoque em lote
-        await Product.bulkWrite(stockUpdates, sessionOptions);
-        console.log(`Estoque retornado com sucesso para ${orderItems.length} itens.`);
-    } catch (stockErr) {
-        console.error("!!! ERRO CRÍTICO AO RETORNAR ESTOQUE !!!:", stockErr);
-        // Considerar adicionar a um log/fila para retentativa manual/automática
-    }
+  } catch (stockErr) {
+    console.error(
+      "[Stock Return] !!! ERRO CRÍTICO AO RETORNAR ESTOQUE !!!:",
+      stockErr
+    );
+  }
 }
 
 /**
@@ -39,133 +49,181 @@ async function returnStockForOrderItems(orderItems, sessionOptions = {}) {
  * @access Usuário Logado
  */
 export const createOrder = async (req, res, next) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) { return res.status(400).json({ errors: errors.array() }); }
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
 
-    const { shippingAddressId, paymentMethod } = req.body;
-    const userId = req.user.id;
+  const { shippingAddressId, paymentMethod } = req.body;
+  const userId = req.user.id;
 
-    const isTestEnv = process.env.NODE_ENV === 'test';
-    let session = null;
-    if (!isTestEnv) {
-        session = await mongoose.startSession();
-        session.startTransaction();
+  const isTestEnv = process.env.NODE_ENV === "test";
+  let session = null;
+
+  try {
+    // Iniciar sessão apenas se não for teste
+    if (process.env.NODE_ENV !== "test") {
+      session = await mongoose.startSession();
+      session.startTransaction();
     }
     const sessionOptions = session ? { session } : {};
 
-    try {
-        const cart = await Cart.findOne({ user: userId }).populate('items.product').setOptions(sessionOptions);
+    // 1. Buscar Carrinho e Endereço (dentro da transação)
+    const cart = await Cart.findOne({ user: userId })
+      .populate("items.product", "_id")
+      .setOptions(sessionOptions);
+    const shippingAddress = await Address.findOne({
+      _id: shippingAddressId,
+      user: userId,
+    })
+      .setOptions(sessionOptions)
+      .lean();
 
-        if (!cart) {
-            if (session) { await session.abortTransaction(); session.endSession(); }
-            return next(new AppError('Carrinho não encontrado.', 404));
-        }
-        if (cart.items.length === 0) {
-            if (session) { await session.abortTransaction(); session.endSession(); }
-            return next(new AppError('Seu carrinho está vazio...', 400));
-        }
-
-        const shippingAddress = await Address.findOne({ _id: shippingAddressId, user: userId }).setOptions(sessionOptions);
-        if (!shippingAddress) { /* ... erro endereço inválido ... */ }
-
-        let itemsPrice = 0;
-        const orderItems = [];
-        const stockErrors = [];
-
-        for (const item of cart.items) {
-            const product = item.product;
-            if (!product) { /* ... erro produto não encontrado ... */ continue; }
-            if (product.stock < item.quantity) {
-                stockErrors.push(`Estoque insuficiente para ${product.name} (Disponível: ${product.stock}, Solicitado: ${item.quantity}).`);
-            }
-            else {
-                itemsPrice += item.quantity * product.price;
-                orderItems.push({
-                    productId: product._id,
-                    name: product.name,
-                    quantity: item.quantity,
-                    price: product.price,
-                    image: product.image
-                });
-            }
-        }
-
-        if (stockErrors.length > 0) {
-            if (session) { await session.abortTransaction(); session.endSession(); }
-            return next(new AppError(`Problemas de estoque: ${stockErrors.join('; ')}`, 400));
-        }
-
-        if (orderItems.length === 0) {
-            if (session) { await session.abortTransaction(); session.endSession(); }
-            return next(new AppError('Nenhum item válido para criar o pedido devido a problemas de estoque.', 400));
-        }
-
-        const shippingPrice = itemsPrice > 100 ? 0 : 10;
-        const totalPrice = itemsPrice + shippingPrice;
-
-        const orderData = {
-            user: userId,
-            orderItems,
-            shippingAddress: {
-                label: shippingAddress?.label,
-                street: shippingAddress?.street,
-                number: shippingAddress?.number,
-                complement: shippingAddress?.complement,
-                neighborhood: shippingAddress?.neighborhood,
-                city: shippingAddress?.city,
-                state: shippingAddress?.state,
-                postalCode: shippingAddress?.postalCode,
-                country: shippingAddress?.country,
-                phone: shippingAddress?.phone
-            },
-            paymentMethod,
-            itemsPrice: parseFloat(itemsPrice.toFixed(2)),
-            shippingPrice: parseFloat(shippingPrice.toFixed(2)),
-            totalPrice: parseFloat(totalPrice.toFixed(2)),
-            orderStatus: 'pending_payment',
-            installments: 1
-        };
-
-        const createdOrderArray = await Order.create([orderData], sessionOptions);
-        const createdOrder = createdOrderArray[0];
-
-        // --- Decrementar Estoque ---
-        for (const item of createdOrder.orderItems) {
-            await Product.findByIdAndUpdate(item.productId, { $inc: { stock: -item.quantity } }, sessionOptions);
-            const productUpdateResult = await Product.findByIdAndUpdate(
-                item.productId,
-                { $inc: { stock: -item.quantity } },
-                { ...sessionOptions, new: true }
-            );
-            if (!productUpdateResult) throw new Error(`Produto ${item.productId} não encontrado durante decremento de estoque.`);
-            if (productUpdateResult.stock < 0) throw new Error(`Estoque negativo para ${item.productId} após decremento.`);
-        }
-
-        // --- Limpar o Carrinho ---
-        cart.items = [];
-        await cart.save(sessionOptions);
-
-        // --- Commit da Transação ---
-        if (session) { await session.commitTransaction(); session.endSession(); }
-
-        // --- Resposta ---
-        res.status(201).json({
-            status: 'success',
-            data: {
-                order: createdOrder
-            }
-        });
-
-    } catch (err) {
-        // --- Rollback da Transação ---
-        if (session) {
-            try { await session.abortTransaction(); session.endSession(); } catch (abortErr) { console.error("Erro ao abortar transação:", abortErr); }
-        }
-        console.error("Erro ao criar pedido:", err);
-        next(err);
+    // 2. Validar Carrinho e Endereço
+    if (!cart) {
+      throw new AppError("Carrinho não encontrado.", 404);
     }
-};
+    if (cart.items.length === 0) {
+      throw new AppError("Seu carrinho está vazio.", 400);
+    }
+    if (!shippingAddress) {
+      throw new AppError(
+        "Endereço de entrega inválido ou não pertence a você.",
+        400
+      );
+    }
 
+    // 3. Verificar Estoque e Preparar Itens do Pedido
+    let itemsPrice = 0;
+    const orderItems = [];
+    const stockErrors = [];
+    const productIdsInCart = cart.items.map((item) => item.product._id);
+    const productsInCart = await Product.find({
+      _id: { $in: productIdsInCart },
+    })
+      .select("stock name price image")
+      .setOptions(sessionOptions);
+    const productMap = new Map(
+      productsInCart.map((p) => [p._id.toString(), p])
+    );
+
+    for (const item of cart.items) {
+      const productIdString = item.product._id.toString();
+      const currentProductState = productMap.get(productIdString);
+
+      if (!currentProductState) {
+        // Este produto estava no carrinho mas não foi encontrado no DB (estado inconsistente?)
+        stockErrors.push(
+          `Produto com ID ${productIdString} não encontrado no banco de dados.`
+        );
+        continue; // Pula este item
+      }
+
+      if (currentProductState.stock < item.quantity) {
+        stockErrors.push(
+          `Estoque insuficiente para ${currentProductState.name} (Disponível: ${currentProductState.stock}, Solicitado: ${item.quantity}).`
+        );
+      } else {
+        const itemPrice = item.quantity * currentProductState.price;
+        itemsPrice += itemPrice;
+        orderItems.push({
+          productId: currentProductState._id,
+          name: currentProductState.name,
+          quantity: item.quantity,
+          price: currentProductState.price,
+          image: currentProductState.image,
+        });
+      }
+    }
+
+    // 4. Abortar se Houver Erros de Estoque
+    if (stockErrors.length > 0) {
+      throw new AppError(
+        `Problemas de estoque: ${stockErrors.join("; ")}`,
+        400
+      );
+    }
+    if (orderItems.length === 0) {
+      throw new AppError("Nenhum item válido para criar o pedido.", 400);
+    }
+
+    // 5. Calcular Preços Finais
+    const shippingPrice = itemsPrice > 100 ? 0 : 10;
+    const totalPrice = itemsPrice + shippingPrice;
+
+    // 6. Montar Dados do Pedido
+    const orderData = {
+      user: userId,
+      orderItems,
+      shippingAddress: {
+        label: shippingAddress.label,
+        street: shippingAddress.street,
+        number: shippingAddress.number,
+        complement: shippingAddress.complement,
+        neighborhood: shippingAddress.neighborhood,
+        city: shippingAddress.city,
+        state: shippingAddress.state,
+        postalCode: shippingAddress.postalCode,
+        country: shippingAddress.country,
+        phone: shippingAddress.phone,
+      },
+      paymentMethod,
+      itemsPrice: parseFloat(itemsPrice.toFixed(2)),
+      shippingPrice: parseFloat(shippingPrice.toFixed(2)),
+      totalPrice: parseFloat(totalPrice.toFixed(2)),
+      orderStatus: "pending_payment",
+      installments: 1,
+    };
+
+    // 7. Criar o Pedido (dentro da transação)
+    const createdOrderArray = await Order.create([orderData], sessionOptions);
+    const createdOrder = createdOrderArray[0];
+
+    // 8. Decrementar Estoque (dentro da transação)
+    for (const item of createdOrder.orderItems) {
+      const productUpdateResult = await Product.findByIdAndUpdate(
+        item.productId,
+        { $inc: { stock: -item.quantity } },
+        { ...sessionOptions, new: true, runValidators: true }
+      );
+      if (!productUpdateResult)
+        throw new Error(
+          `Produto ${item.productId} não encontrado durante decremento.`
+        );
+      if (productUpdateResult.stock < 0)
+        throw new Error(`Estoque negativo para ${item.productId}.`);
+    }
+    // 9. Limpar o Carrinho (dentro da transação)
+    cart.items = [];
+    await cart.save(sessionOptions);
+
+    // 10. Commit da Transação (se não for teste)
+    if (session) {
+      await session.commitTransaction();
+      session.endSession();
+    }
+
+    // 11. Resposta
+    res.status(201).json({
+      status: "success",
+      data: {
+        order: createdOrder,
+      },
+    });
+  } catch (err) {
+    // 12. Rollback em caso de erro
+    if (session) {
+      try {
+        await session.abortTransaction();
+      } catch (abortErr) {
+      } finally {
+        session.endSession();
+      }
+    }
+    // Passa o erro para o global error handler
+    next(err);
+  }
+};
 
 /**
  * @description Processa o pagamento de um pedido usando dados tokenizados do frontend.
@@ -173,86 +231,194 @@ export const createOrder = async (req, res, next) => {
  * @access Usuário Logado
  */
 export const payOrder = async (req, res, next) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) { return res.status(400).json({ errors: errors.array() }); }
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
 
-    const orderId = req.params.id;
-    const userId = req.user.id;
-    const { token, payment_method_id, issuer_id, installments, payer } = req.body;
+  const orderId = req.params.id;
+  const userId = req.user.id;
 
-    let order;
+  // Dados do corpo da requisição (SDK JS V2 do MP)
+  const { token, payment_method_id, issuer_id, installments, payer } = req.body;
 
-    try {
-        if (!isMercadoPagoConfigured() || !mpClient) { /* ... erro config SDK ... */ }
+  let order;
+  let mpResponse;
+  let paymentApiCalled = false;
 
-        order = await Order.findOne({ _id: orderId, user: userId });
-        if (!order) { return next(new AppError('Pedido não encontrado ou não pertence a você.', 404)); }
-        if (order.orderStatus !== 'pending_payment') { return next(new AppError(`Pedido não pode ser pago (Status: ${order.orderStatus}).`, 400)); }
-        if (order.mercadopagoPaymentId) {
-            return next(new AppError(`Pagamento para este pedido já foi iniciado ou processado.`, 400));
-        }
-
-        // --- Interação com Mercado Pago ---
-        const paymentData = {
-            transaction_amount: 'string',
-            token: 'string',
-            description: 'string',
-            installments: number,
-            payment_method_id: 'string',
-            issuer_id: 'string' || null,
-            payer: {
-              email: 'string',
-              identification: {
-                type: 'string',
-                number: 'string'
-              }
-            }
-          };
-        const payment = new Payment(mpClient);
-        const mpResponse = await payment.create({ body: paymentData });
-
-        // --- Processamento da Resposta Síncrona MP ---
-        if (!mpResponse || !mpResponse.id || !mpResponse.status) {
-            return next(new AppError('Falha ao processar pagamento junto ao Mercado Pago (resposta inválida).', 502));
-        }
-
-        // --- Atualizar pedido com dados do MP ---
-        order.mercadopagoPaymentId = mpResponse.id.toString();
-        order.paymentResult = { /* ... preencher com dados mpResponse ... */ };
-        order.installments = mpResponse.installments || 1;
-
-        const paymentFailed = ['rejected', 'cancelled', 'failed', 'charged_back'].includes(mpResponse.status);
-
-        // --- Atualiza status do pedido local ---
-        if (mpResponse.status === 'approved') {
-            order.orderStatus = 'processing'; // Ou 'paid' dependendo da regra de negócio
-            order.paidAt = new Date();
-        } else if (paymentFailed) {
-            order.orderStatus = 'failed';
-            // ----> INÍCIO: Lógica para retornar estoque em caso de falha SÍNCRONA <----
-            console.log(`Pagamento SÍNCRONO falhou para pedido ${order._id} (Status MP: ${mpResponse.status}). Tentando retornar estoque...`);
-            await returnStockForOrderItems(order.orderItems);
-            order.paymentResult.status = mpResponse.status;
-        }
-
-        await order.save();
-
-        res.status(200).json({
-            status: 'success',
-            message: `Pagamento processado com status: ${mpResponse.status}`,
-            data: {
-                order: order
-            }
-        });
-
-    } catch (err) {
-        console.error(`Erro no processamento de pagamento para pedido ${orderId}:`, err);
-        let message = 'Falha ao processar o pagamento.';
-        const mpErrorMessage = err.cause?.error?.message || err.error?.message;
-        if (mpErrorMessage) { message = `Erro do Mercado Pago: ${mpErrorMessage}`; }
-        else if (err.message) { message = err.message; }
-        next(new AppError(message, err.statusCode || 500));
+  try {
+    // 1. Verificar Configuração do SDK
+    if (!isMercadoPagoConfigured() || !mpClient) {
+      throw new AppError(
+        "Configuração do gateway de pagamento indisponível.",
+        503
+      );
     }
+
+    // 2. Buscar Pedido e Validar Status
+    order = await Order.findOne({ _id: orderId, user: userId });
+    if (!order) {
+      return next(
+        new AppError("Pedido não encontrado ou não pertence a você.", 404)
+      );
+    }
+    if (order.orderStatus !== "pending_payment") {
+      return next(
+        new AppError(
+          `Este pedido não está mais pendente de pagamento (Status: ${order.orderStatus}).`,
+          400
+        )
+      );
+    }
+    // Adicionado verificação para evitar processar novamente se ID MP já existe
+    if (order.mercadopagoPaymentId) {
+      return next(
+        new AppError(
+          `Pagamento para este pedido (${orderId
+            .toString()
+            .slice(-4)}) já foi iniciado ou processado anteriormente.`,
+          400
+        )
+      );
+    }
+
+    // 3. Montar Corpo para API de Pagamentos V1 do MP - CORRIGIDO
+    const paymentPayload = {
+      transaction_amount: order.totalPrice,
+      token: token,
+      description: `Pedido #${order._id.toString().slice(-6)} - Sua Loja`,
+      installments: parseInt(installments) || 1,
+      payment_method_id: payment_method_id,
+      payer: {
+        email: payer.email,
+        ...(payer.identification &&
+          payer.identification.type &&
+          payer.identification.number && {
+            identification: {
+              type: payer.identification.type.toUpperCase(),
+              number: payer.identification.number.replace(/\D/g, ""),
+            },
+          }),
+      },
+      // Incluir issuer_id se fornecido (importante para alguns cartões)
+      ...(issuer_id && { issuer_id: issuer_id }),
+      external_reference: order._id.toString(),
+      notification_url: process.env.MERCADOPAGO_WEBHOOK_URL,
+    };
+
+    // 4. Chamar API do Mercado Pago
+    const paymentAPI = new Payment(mpClient);
+    paymentApiCalled = true;
+    mpResponse = await paymentAPI.create({ body: paymentPayload });
+
+    // 5. Processar Resposta Síncrona MP
+    if (!mpResponse || !mpResponse.id || !mpResponse.status) {
+      // Se a resposta do MP for inválida, gerar erro, mas não retornar estoque ainda
+      throw new AppError(
+        "Falha ao processar pagamento: resposta inválida do gateway.",
+        502
+      );
+    }
+
+    // 6. Atualizar Pedido com dados do MP
+    order.mercadopagoPaymentId = mpResponse.id.toString();
+    order.paymentResult = {
+      id: mpResponse.id?.toString() || null,
+      status: mpResponse.status || null,
+      update_time:
+        mpResponse.date_last_updated ||
+        mpResponse.date_created ||
+        new Date().toISOString(),
+      email_address: mpResponse.payer?.email || null,
+      card_brand: mpResponse.payment_method_id || null,
+      card_last_four: mpResponse.card?.last_four_digits || null,
+    };
+    order.installments = mpResponse.installments || order.installments;
+
+    const paymentFailed = [
+      "rejected",
+      "cancelled",
+      "failed",
+      "charged_back",
+    ].includes(mpResponse.status);
+    let needsStockReturn = false;
+    // Guarda o status ANTES de atualizar
+    const previousStatus = order.orderStatus;
+
+    // 7. Atualizar Status do Pedido Local e Retornar Estoque se Falhar
+    if (
+      mpResponse.status === "approved" ||
+      mpResponse.status === "authorized"
+    ) {
+      order.orderStatus = "processing";
+      order.paidAt = new Date();
+    } else if (paymentFailed) {
+      // ---- VERIFICAÇÃO IMPORTANTE ----
+      if (order.orderStatus === "pending_payment") {
+        order.orderStatus = "failed";
+        needsStockReturn = true;
+      }
+      if (order.paymentResult) order.paymentResult.status = mpResponse.status;
+    }
+
+    // 8. Salvar o Pedido Atualizado
+    await order.save();
+
+    // 9. Retorno de estoque
+    if (needsStockReturn) {
+      // <<< LOG ANTES DE RETORNAR >>>
+      const stockBeforeReturn = await Product.findById(
+        order.orderItems[0].productId
+      ).select("stock");
+
+      await returnStockForOrderItems(order.orderItems);
+      // <<< LOG DEPOIS DE RETORNAR >>>
+      const stockAfterReturn = await Product.findById(
+        order.orderItems[0].productId
+      ).select("stock");
+    }
+
+    // 10. Resposta ao Frontend
+    res.status(200).json({
+      status: "success",
+      message: `Pagamento processado com status inicial: ${mpResponse.status}`,
+      data: { order: order },
+    });
+  } catch (err) {
+    let statusCode = 500;
+    let message = "Falha interna ao processar o pagamento.";
+
+    if (err instanceof AppError) {
+      message = err.message;
+      statusCode = err.statusCode;
+    } else {
+      const mpErrorMessage =
+        err.cause?.error?.message ||
+        err.error?.message ||
+        err.response?.data?.message ||
+        err.message;
+
+      const isMpApiError =
+        paymentApiCalled &&
+        (err.cause ||
+          err.response ||
+          (err.statusCode && err.statusCode >= 400 && err.statusCode < 500));
+
+      if (isMpApiError) {
+        message = `Erro do Gateway de Pagamento: ${
+          mpErrorMessage || "Erro desconhecido"
+        }`;
+        statusCode =
+          err.statusCode && err.statusCode >= 400 && err.statusCode < 500
+            ? err.statusCode
+            : 400;
+      }
+    }
+
+    if (!res.headersSent) {
+      next(new AppError(message, statusCode));
+    }
+  }
 };
 
 /**
@@ -261,21 +427,21 @@ export const payOrder = async (req, res, next) => {
  * @access Usuário Logado
  */
 export const getMyOrders = async (req, res, next) => {
-    try {
-        const userId = req.user.id;
-        // Busca os pedidos do usuário, ordenados do mais recente para o mais antigo
-        const orders = await Order.find({ user: userId }).sort('-createdAt');
+  try {
+    const userId = req.user.id;
+    // Busca os pedidos do usuário, ordenados do mais recente para o mais antigo
+    const orders = await Order.find({ user: userId }).sort("-createdAt");
 
-        res.status(200).json({
-            status: 'success',
-            results: orders.length,
-            data: {
-                orders
-            }
-        });
-    } catch (err) {
-        next(err);
-    }
+    res.status(200).json({
+      status: "success",
+      results: orders.length,
+      data: {
+        orders,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
 };
 
 /**
@@ -284,46 +450,45 @@ export const getMyOrders = async (req, res, next) => {
  * @access Usuário Logado
  */
 export const getOrderById = async (req, res, next) => {
-    // Validação do ID feita na rota
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
+  // Validação do ID feita na rota
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const orderId = req.params.id;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    let query = {};
+    // Admin pode ver qualquer pedido, usuário normal só pode ver os seus
+    if (userRole === "admin") {
+      query = { _id: orderId };
+    } else {
+      query = { _id: orderId, user: userId };
     }
 
-    try {
-        const orderId = req.params.id;
-        const userId = req.user.id;
-        const userRole = req.user.role;
+    // Busca o pedido. Pode popular o usuário se quiser mostrar nome/email.
+    const order = await Order.findOne(query).populate("user", "name email");
 
-        let query = {};
-        // Admin pode ver qualquer pedido, usuário normal só pode ver os seus
-        if (userRole === 'admin') {
-            query = { _id: orderId };
-        } else {
-            query = { _id: orderId, user: userId };
-        }
-
-        // Busca o pedido. Pode popular o usuário se quiser mostrar nome/email.
-        const order = await Order.findOne(query).populate('user', 'name email');
-
-        if (!order) {
-            // Mensagem genérica para não vazar informação se o pedido existe mas não é do usuário
-            return next(new AppError('Pedido não encontrado.', 404));
-        }
-
-        res.status(200).json({
-            status: 'success',
-            data: {
-                order
-            }
-        });
-
-    } catch (err) {
-        if (err.name === 'CastError') {
-            return next(new AppError(`ID de pedido inválido: ${req.params.id}`, 400));
-        }
-        next(err);
+    if (!order) {
+      // Mensagem genérica para não vazar informação se o pedido existe mas não é do usuário
+      return next(new AppError("Pedido não encontrado.", 404));
     }
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        order,
+      }
+    });
+  } catch (err) {
+    if (err.name === "CastError") {
+      return next(new AppError(`ID de pedido inválido: ${req.params.id}`, 400));
+    }
+    next(err);
+  }
 };
 
 export { returnStockForOrderItems };
