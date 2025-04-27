@@ -589,18 +589,6 @@ const swaggerOptions = {
     apis: ['.src/routes/*.js'],
 };
 
-// --- Configuração do CORS ---
-const corsOptions = {
-    // Permite requisições APENAS desta origem
-    origin: 'http://localhost:5173',
-    // Métodos HTTP permitidos
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-    // Cabeçalhos permitidos que o frontend pode enviar
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    // Permite envio de credenciais (cookies, cabeçalho Authorization)
-    credentials: true
-  };
-
 // --- Middlewares ---
 app.use(cors(corsOptions));
 app.use('/api/', apiLimiter);
