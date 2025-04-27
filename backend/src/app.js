@@ -1,7 +1,6 @@
 //src/app.js
 import express from 'express';
 import dotenv from 'dotenv';
-import { connectDB } from './config/db.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import productRoutes from './routes/products.js';
@@ -9,7 +8,7 @@ import categoryRoutes from './routes/category.js';
 import addressRoutes from './routes/addressRoutes.js';
 import cartRoutes from './routes/cartRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
-import webhookRoutes from './routes/webhooks.js';
+import router from './routes/webhooks.js';
 import swaggerUI from 'swagger-ui-express';
 import swaggerJSDoc from 'swagger-jsdoc';
 import { apiLimiter, corsOptions } from './config/security.js';
@@ -595,7 +594,7 @@ app.use(cors(corsOptions));
 app.use('/api/', apiLimiter);
 
 // --- Rota do Webhook ---
-app.use('/api/webhooks', webhookRoutes);
+app.use('/api/webhooks', router);
 
 // --- Body parsers globais ---
 app.use(express.json({ limit: '20kb' }));

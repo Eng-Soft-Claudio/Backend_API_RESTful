@@ -5,16 +5,16 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const accessToken = process.env.MP_ACCESS_TOKEN;
-let client = null; 
+let mpClient = null; 
 
 if (!accessToken) {
     console.error("ERRO CRÍTICO: MP_ACCESS_TOKEN não definido nas variáveis de ambiente.");
 } else {
-    client = new MercadoPagoConfig({ accessToken: accessToken });
+    mpClient = new MercadoPagoConfig({ accessToken: accessToken });
 }
 
-export default client;
+export default mpClient;
 
 export { Payment };
 
-export const isMercadoPagoConfigured = () => !!client; 
+export const isMercadoPagoConfigured = () => !!mpClient; 

@@ -1,6 +1,6 @@
 // src/routes/webhooks.js
-import express from 'express';
-import { handleWebhook } from '../controllers/webhooks.js';
+import express from "express";
+import { handleWebhook } from "../controllers/webhooks.js";
 
 const router = express.Router();
 
@@ -56,11 +56,10 @@ const router = express.Router();
  *     security: [] # Marca como público em termos de JWT
  */
 router.post(
-    '/handler',
-    // Middleware raw body (se necessário para assinatura) ou parsing manual
-    express.raw({ type: 'application/json' }),
-    handleWebhook
+  "/handler",
+  // Middleware raw body (se necessário para assinatura) ou parsing manual
+  express.raw({ type: "application/json", limit: "5mb" }),
+  handleWebhook
 );
-
 
 export default router;
