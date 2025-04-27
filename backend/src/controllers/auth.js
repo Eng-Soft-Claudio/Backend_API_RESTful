@@ -53,7 +53,6 @@ export const register = async (req, res, next) => {
         });
 
     } catch (err) {
-        console.error("💥 ERRO em register:", err); 
         next(err);
     }
 };

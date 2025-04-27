@@ -8,7 +8,6 @@ const accessToken = process.env.MP_ACCESS_TOKEN;
 let mpClient = null; 
 
 if (!accessToken) {
-    console.error("ERRO CRÍTICO: MP_ACCESS_TOKEN não definido nas variáveis de ambiente.");
 } else {
     mpClient = new MercadoPagoConfig({ accessToken: accessToken });
 }
