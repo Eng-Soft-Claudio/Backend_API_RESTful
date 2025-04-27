@@ -1,7 +1,8 @@
 //src/routes/auth.js
 import express from 'express';
 import { body } from 'express-validator';
-import { login, register } from '../controllers/auth.js';
+import { login, register, getCurrentUser  } from '../controllers/auth.js';
+import { authenticate } from '../middleware/auth.js';
 import User from '../models/User.js';
 
 const router = express.Router();
@@ -116,5 +117,49 @@ router.post('/login', loginValidationRules, login);
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post('/register', registerValidationRules, register);
+
+/**
+ * @swagger
+ * /api/auth/me:
+ *   get:
+ *     summary: Retorna os dados do usuário autenticado atualmente.
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       '200':
+ *         description: Dados do usuário recuperados com sucesso.
+ *         content:
+ *           application/json:
+ *             schema:
+ *                # Schema que contém status: success e data: { user: UserResponse }
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                      user:
+ *                         $ref: '#/components/schemas/UserResponse' # Schema com dados do usuário (id, name, email, role)
+ *       '401':
+ *         description: Não autorizado (token ausente, inválido ou expirado).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       '500':
+ *         description: Erro interno do servidor (ex: falha no middleware).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.get(
+    '/me',
+    authenticate,  
+    getCurrentUser    
+);
 
 export default router;

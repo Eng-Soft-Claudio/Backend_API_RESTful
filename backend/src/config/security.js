@@ -13,7 +13,7 @@ export const apiLimiter = rateLimit({
 
 // Configuração de CORS
 export const corsOptions = {
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || 'http://localhost:5173',
+    origin: process.env.ALLOWED_ORIGINS?.split(','),
     methods: ['GET,HEAD,PUT,PATCH,POST,DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
