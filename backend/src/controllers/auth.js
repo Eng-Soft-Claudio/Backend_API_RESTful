@@ -22,12 +22,10 @@ export const login = async (req, res, next) => {
       return next(new AppError("Credenciais inválidas", 401));
     }
     const token = signToken(user._id, user.role);
-    res.status(200).json({ status: "success", token });
     const userData = {
       id: user._id,
       name: user.name,
       email: user.email,
-      password: user.password,
       role: user.role,
     };
     res.status(200).json({
@@ -37,6 +35,7 @@ export const login = async (req, res, next) => {
         user: userData,
       },
     });
+    return;
   } catch (err) {
     next(err);
   }
@@ -75,20 +74,24 @@ export const register = async (req, res, next) => {
   }
 };
 
-// --- Controller de Usuário 
+// --- Controller de Usuário
 export const getCurrentUser = async (req, res, next) => {
-    try {
-        if (!req.user) {
-            return next(new AppError('Usuário não encontrado na requisição. Middleware pode ter falhado.', 500));
-        }
-        res.status(200).json({
-            status: 'success',
-            data: {
-                user: req.user 
-            }
-        });
-
-    } catch (error) {
-        next(error);
+  try {
+    if (!req.user) {
+      return next(
+        new AppError(
+          "Usuário não encontrado na requisição. Middleware pode ter falhado.",
+          500
+        )
+      );
     }
+    res.status(200).json({
+      status: "success",
+      data: {
+        user: req.user,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
 };
