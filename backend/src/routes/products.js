@@ -1,67 +1,77 @@
 //src/routes/products.js
-import express from 'express';
-import { authenticate, isAdmin } from '../middleware/auth.js';
-import { body, param, query } from 'express-validator';
+import express from "express";
+import { authenticate, isAdmin } from "../middleware/auth.js";
+import { body, param, query } from "express-validator";
 import {
-    createProduct,
-    getProducts,
-    updateProduct,
-    deleteProduct
-} from '../controllers/products.js';
-import Category from '../models/Category.js';
-import { upload } from '../middleware/upload.js';
+  createProduct,
+  getProducts,
+  updateProduct,
+  deleteProduct,
+} from "../controllers/products.js";
+import Category from "../models/Category.js";
+import { upload } from "../middleware/upload.js";
 
 // --- VALIDAÇÕES ---
 
 const mongoIdValidation = (paramName, message) => [
-    param(paramName, message || `ID inválido para ${paramName}`).isMongoId()
+  param(paramName, message || `ID inválido para ${paramName}`).isMongoId(),
 ];
 
-const categoryExists = body('category', 'ID de Categoria inválido ou não existente')
-    .isMongoId()
-    .custom(async (categoryId) => {
-        const category = await Category.findById(categoryId);
-        if (!category) {
-            return Promise.reject('Categoria não encontrada.');
-        }
-    });
+const categoryExists = body(
+  "category",
+  "ID de Categoria inválido ou não existente"
+)
+  .isMongoId()
+  .custom(async (categoryId) => {
+    const category = await Category.findById(categoryId);
+    if (!category) {
+      return Promise.reject("Categoria não encontrada.");
+    }
+  });
 
 const createProductValidationRules = [
-    body('name', 'Nome obrigatório').trim().notEmpty(),
-    body('price', 'Preço inválido').isFloat({ gt: 0 }),
-    categoryExists,
-    body('description', 'Descrição inválida').optional().trim(),
-    body('stock', 'Estoque inválido').optional().isInt({ min: 0 }).toInt()
+  body("name", "Nome obrigatório").trim().notEmpty(),
+  body("price", "Preço inválido").isFloat({ gt: 0 }).toFloat(),
+  categoryExists,
+  body("description", "Descrição inválida").optional().trim(),
+  body("stock", "Estoque inválido").optional().isInt({ min: 0 }).toInt(),
 ];
 
 const updateProductValidationRules = [
-    body('name', 'Nome não pode ser vazio').optional().trim().notEmpty(),
-    body('price', 'Preço deve ser positivo').optional().isFloat({ gt: 0 }),
-    body('category', 'ID de Categoria inválido')
-        .optional()
-        .isMongoId()
-        .custom(async (categoryId) => {
-            if (!categoryId) return;
-            const category = await Category.findById(categoryId);
-            if (!category) return Promise.reject('Categoria não encontrada.');
-        }),
-    body('description', 'Descrição inválida').optional({ nullable: true, checkFalsy: true }).trim(),
-    body('stock', 'Estoque inválido').optional({ nullable: true }).isInt({ min: 0 }).toInt()
+  body("name", "Nome não pode ser vazio").optional().trim().notEmpty(),
+  body("price", "Preço deve ser positivo").optional().isFloat({ gt: 0 }),
+  body("category", "ID de Categoria inválido")
+    .optional()
+    .isMongoId()
+    .custom(async (categoryId) => {
+      if (!categoryId) return;
+      const category = await Category.findById(categoryId);
+      if (!category) return Promise.reject("Categoria não encontrada.");
+    }),
+  body("description", "Descrição inválida")
+    .optional({ nullable: true, checkFalsy: true })
+    .trim(),
+  body("stock", "Estoque inválido")
+    .optional({ nullable: true })
+    .isInt({ min: 0 })
+    .toInt(),
 ];
 
 const getProductsValidationRules = [
-    query('page', 'Página inválida').optional().isInt({ gt: 0 }).toInt(),
-    query('limit', 'Limite inválido').optional().isInt({ gt: 0 }).toInt(),
-    query('category', 'Identificador de categoria inválido')
-        .optional()
-        .isString()
-        .trim(),
-    query('q', 'Termo de busca inválido').optional().trim().escape(),
-    query('sort', 'Ordenação inválida').optional().matches(/^[a-zA-Z_, -]+$/).trim()
+  query("page", "Página inválida").optional().isInt({ gt: 0 }).toInt(),
+  query("limit", "Limite inválido").optional().isInt({ gt: 0 }).toInt(),
+  query("category", "Identificador de categoria inválido")
+    .optional()
+    .isString()
+    .trim(),
+  query("q", "Termo de busca inválido").optional().trim().escape(),
+  query("sort", "Ordenação inválida")
+    .optional()
+    .matches(/^[a-zA-Z_, -]+$/)
+    .trim(),
 ];
 
 const router = express.Router();
-
 
 /**
  * @swagger
@@ -147,7 +157,7 @@ const router = express.Router();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get('/', getProductsValidationRules, getProducts);
+router.get("/", getProductsValidationRules, getProducts);
 
 /**
  * @swagger
@@ -185,7 +195,14 @@ router.get('/', getProductsValidationRules, getProducts);
  *       '404': { description: Categoria referenciada não encontrada (se validação custom falhar), content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
  *       '500': { description: Erro interno (ex: falha no upload ou DB), content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
  */
-router.post('/', authenticate, isAdmin, upload.single('image'), createProductValidationRules, createProduct);
+router.post(
+  "/",
+  authenticate,
+  isAdmin,
+  upload.single("image"),
+  createProductValidationRules,
+  createProduct
+);
 
 /**
  * @swagger
@@ -227,7 +244,15 @@ router.post('/', authenticate, isAdmin, upload.single('image'), createProductVal
  *       '500': { description: Erro interno, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
  */
 // Nota: Usamos PUT aqui, mas PATCH também seria semanticamente correto para atualizações parciais.
-router.put('/:id', authenticate, isAdmin, mongoIdValidation('id', 'ID de produto inválido'), upload.single('image'), updateProductValidationRules, updateProduct);
+router.put(
+  "/:id",
+  authenticate,
+  isAdmin,
+  mongoIdValidation("id", "ID de produto inválido"),
+  upload.single("image"),
+  updateProductValidationRules,
+  updateProduct
+);
 
 /**
  * @swagger
@@ -261,6 +286,12 @@ router.put('/:id', authenticate, isAdmin, mongoIdValidation('id', 'ID de produto
  *       '404': { description: Produto não encontrado, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
  *       '500': { description: Erro interno, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
  */
-router.delete('/:id', authenticate, isAdmin, mongoIdValidation('id', 'ID de produto inválido'), deleteProduct);
+router.delete(
+  "/:id",
+  authenticate,
+  isAdmin,
+  mongoIdValidation("id", "ID de produto inválido"),
+  deleteProduct
+);
 
 export default router;

@@ -20,9 +20,6 @@ import reviewRoutes from './routes/reviewRoutes.js';
 // .env
 dotenv.config();
 
-
-
-
 // Declaração de Constantes
 const app = express();
 app.set('trust proxy', 1);
