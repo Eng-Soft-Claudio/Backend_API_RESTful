@@ -1,17 +1,17 @@
 //src/routes/orderRoutes.js
-import express from 'express';
-import { body, param } from 'express-validator';
-import { authenticate, isAdmin } from '../middleware/auth.js'; 
+import express from "express";
+import { body, param } from "express-validator";
+import { authenticate, isAdmin } from "../middleware/auth.js";
 import {
-    createOrder,
-    getMyOrders,
-    getOrderById,
-    payOrder,
-    getAllOrders,             
-    updateOrderToShipped,     
-    updateOrderToDelivered 
-} from '../controllers/orderController.js';
-import Address from '../models/Address.js'; 
+  createOrder,
+  getMyOrders,
+  getOrderById,
+  payOrder,
+  getAllOrders,
+  updateOrderToShipped,
+  updateOrderToDelivered,
+} from "../controllers/orderController.js";
+import Address from "../models/Address.js";
 
 const router = express.Router();
 
@@ -21,36 +21,69 @@ router.use(authenticate);
 
 // Validação para criar pedido
 const createOrderValidationRules = [
-    body('shippingAddressId', 'ID do endereço de entrega inválido ou não pertence a você')
-        .isMongoId()
-        .custom(async (value, { req }) => {
-            // Verifica se o endereço existe E pertence ao usuário logado
-            const address = await Address.findOne({ _id: value, user: req.user.id });
-            if (!address) {
-                return Promise.reject('Endereço de entrega inválido ou não pertence a você.');
-            }
-            req.shippingAddressData = address;
-        }),
-    body('paymentMethod', 'Método de pagamento é obrigatório').trim().notEmpty()
+  body(
+    "shippingAddressId",
+    "ID do endereço de entrega inválido ou não pertence a você"
+  )
+    .isMongoId()
+    .custom(async (value, { req }) => {
+      // Verifica se o endereço existe E pertence ao usuário logado
+      const address = await Address.findOne({ _id: value, user: req.user.id });
+      if (!address) {
+        return Promise.reject(
+          "Endereço de entrega inválido ou não pertence a você."
+        );
+      }
+      req.shippingAddressData = address;
+    }),
+  body("paymentMethod", "Método de pagamento é obrigatório").trim().notEmpty(),
 ];
 
 // Validação para parâmetro ID do pedido na URL
 const orderIdParamValidation = [
-    param('id', 'ID do pedido inválido na URL').isMongoId()
+  param("id", "ID do pedido inválido na URL").isMongoId(),
 ];
 
 // Validação para pagar pedido
 const payOrderValidationRules = [
-    body('token', 'Token de pagamento é obrigatório').trim().notEmpty(), 
-    body('payment_method_id', 'ID do método de pagamento é obrigatório').trim().notEmpty(), 
-    body('installments', 'Número de parcelas é obrigatório').isInt({ min: 1 }).toInt(),
-    body('payer', 'Informações do pagador são obrigatórias').isObject(),
-    body('payer.email', 'Email do pagador é obrigatório').isEmail().normalizeEmail(),
-    body('issuer_id', 'ID do emissor (banco) é opcional').optional().trim() ,
-    body('payer.identification.type', 'Tipo de identificação do pagador é obrigatório').optional().trim().notEmpty(),
-    body('payer.identification.number', 'Número de identificação do pagador é obrigatório').optional().trim().notEmpty(),
-];
+  // Obrigatórios
+  body("payment_method_id", "ID do método de pagamento é obrigatório")
+    .trim()
+    .notEmpty(),
+  body("payer", "Informações do pagador são obrigatórias").isObject(),
+  body("payer.email", "Email do pagador é obrigatório")
+    .isEmail()
+    .normalizeEmail(),
 
+  // Condicionais
+  body("token", "Token de pagamento é obrigatório para cartões")
+    .if(body("payment_method_id").not().isIn(["pix", "account_money"]))
+    .trim()
+    .notEmpty(),
+  body("installments", "Número de parcelas é obrigatório")
+    .if(body("payment_method_id").not().isIn(["pix", "account_money"]))
+    .isInt({ min: 1 })
+    .withMessage("Parcela deve ser no mínimo 1")
+    .toInt(),
+  body("issuer_id", "ID do emissor (banco) é inválido")
+    .if(body("payment_method_id").not().isIn(["pix", "account_money"]))
+    .optional()
+    .trim(),
+  body(
+    "payer.identification.type",
+    "Tipo de identificação do pagador é obrigatório"
+  )
+    .optional()
+    .trim()
+    .notEmpty(),
+  body(
+    "payer.identification.number",
+    "Número de identificação do pagador é obrigatório"
+  )
+    .optional()
+    .trim()
+    .notEmpty(),
+];
 
 // --- Definição das Rotas ---
 
@@ -95,11 +128,7 @@ const payOrderValidationRules = [
  *                     order: { $ref: '#/components/schemas/OrderOutput' } // << REFERENCIA OrderOutput
  *       # ... (outras respostas 4xx, 5xx) ...
  */
-router.post(
-    '/',
-    createOrderValidationRules,
-    createOrder
-);
+router.post("/", createOrderValidationRules, createOrder);
 
 /**
  * @swagger
@@ -128,10 +157,7 @@ router.post(
  *                         $ref: '#/components/schemas/OrderOutput' // << REFERENCIA OrderOutput
  *       # ... (outras respostas 4xx, 5xx) ...
  */
-router.get(
-    '/my',
-    getMyOrders
-);
+router.get("/my", getMyOrders);
 
 /**
  * @swagger
@@ -171,10 +197,10 @@ router.get(
  *       # ... (outras respostas 4xx, 5xx) ...
  */
 router.post(
-    '/:id/pay',
-    orderIdParamValidation,
-    payOrderValidationRules,
-    payOrder
+  "/:id/pay",
+  orderIdParamValidation,
+  payOrderValidationRules,
+  payOrder
 );
 
 /**
@@ -206,11 +232,7 @@ router.post(
  *                     order: { $ref: '#/components/schemas/OrderOutput' } // << REFERENCIA OrderOutput
  *       # ... (outras respostas 4xx, 5xx) ...
  */
-router.get(
-    '/:id',
-    orderIdParamValidation,
-    getOrderById
-);
+router.get("/:id", orderIdParamValidation, getOrderById);
 
 /**
  * @swagger
@@ -252,12 +274,7 @@ router.get(
  *                              items: { $ref: '#/components/schemas/OrderOutput' }
  *       # ... respostas 401, 403, 500 ...
  */
-router.get(
-    '/',
-    authenticate,
-    isAdmin,
-    getAllOrders
-);
+router.get("/", authenticate, isAdmin, getAllOrders);
 
 /**
  * @swagger
@@ -279,11 +296,11 @@ router.get(
  *       # ... respostas 400, 401, 403, 404, 500 ...
  */
 router.put(
-    '/:id/ship',
-    authenticate,
-    isAdmin,
-    orderIdParamValidation,
-    updateOrderToShipped
+  "/:id/ship",
+  authenticate,
+  isAdmin,
+  orderIdParamValidation,
+  updateOrderToShipped
 );
 
 /**
@@ -306,12 +323,11 @@ router.put(
  *       # ... respostas 400, 401, 403, 404, 500 ...
  */
 router.put(
-    '/:id/deliver',
-    authenticate,
-    isAdmin,
-    orderIdParamValidation,
-    updateOrderToDelivered
+  "/:id/deliver",
+  authenticate,
+  isAdmin,
+  orderIdParamValidation,
+  updateOrderToDelivered
 );
-
 
 export default router;
