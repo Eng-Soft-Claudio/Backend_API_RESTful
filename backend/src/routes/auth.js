@@ -1,38 +1,71 @@
 //src/routes/auth.js
-import express from 'express';
-import { body } from 'express-validator';
-import { login, register, getCurrentUser  } from '../controllers/auth.js';
-import { authenticate } from '../middleware/auth.js';
-import User from '../models/User.js';
+import express from "express";
+import { body } from "express-validator";
+import { login, register, getCurrentUser } from "../controllers/auth.js";
+import { authenticate } from "../middleware/auth.js";
+import User from "../models/User.js";
+import { cpf } from "cpf-cnpj-validator";
 
 const router = express.Router();
 
 // --- Validações ---
 const loginValidationRules = [
-    body('email', 'Email inválido').isEmail().normalizeEmail(),
-    body('password', 'Senha é obrigatória').notEmpty()
+  body("email", "Email inválido").isEmail().normalizeEmail(),
+  body("password", "Senha é obrigatória").notEmpty(),
 ];
 const registerValidationRules = [
-    body('name', 'Nome é obrigatório').trim().notEmpty(),
-    body('email', 'Email inválido')
-        .isEmail()
-        .normalizeEmail()
-        .custom(async (value) => {
-            const user = await User.findOne({ email: value });
-            if (user) {
-                return Promise.reject('Este E-mail já está registrado.');
-            }
-        }),
-    body('password', 'Senha deve ter no mínimo 8 caracteres')
-        .isLength({ min: 8 })
-        .trim(),
-    body('passwordConfirm', 'Confirmação de senha não confere com a senha')
-        .custom((value, { req }) => {
-            if (value !== req.body.password) {
-                throw new Error('As senhas não coincidem.');
-            }
-            return true;
-        })
+  body("name", "Nome é obrigatório").trim().notEmpty(),
+  body("email", "Email inválido")
+    .isEmail()
+    .normalizeEmail()
+    .custom(async (value) => {
+      const user = await User.findOne({ email: value });
+      if (user) {
+        return Promise.reject("Este E-mail já está registrado.");
+      }
+    }),
+  body("password", "Senha deve ter no mínimo 8 caracteres")
+    .isLength({ min: 8 })
+    .trim(),
+  body("cpf", "CPF inválido")
+    .trim()
+    .notEmpty()
+    .withMessage("CPF é obrigatório.")
+    .isLength({ min: 11, max: 14 })
+    .withMessage("Formato de CPF inválido.")
+    .custom((value) => {
+      const cpfDigits = value.replace(/\D/g, "");
+      if (!cpf.isValid(cpfDigits)) {
+        throw new Error("CPF inválido.");
+      }
+      return true;
+    })
+    .custom(async (value) => {
+      const cpfDigits = value.replace(/\D/g, "");
+      const user = await User.findOne({ cpf: cpfDigits });
+      if (user) {
+        return Promise.reject("Este CPF já está registrado.");
+      }
+    }),
+  body("birthDate", "Data de nascimento inválida")
+    .trim()
+    .notEmpty()
+    .withMessage("Data de nascimento é obrigatória.")
+    .isISO8601()
+    .toDate() 
+    .custom((value) => {
+      const today = new Date();
+      const birthDate = new Date(value);
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const m = today.getMonth() - birthDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      if (age < 16) {
+        throw new Error("Você deve ter pelo menos 16 anos.");
+      }
+      return true;
+    }),
 ];
 
 // --- ROTAS ---
@@ -82,7 +115,7 @@ const registerValidationRules = [
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/login', loginValidationRules, login);
+router.post("/login", loginValidationRules, login);
 
 /**
  * @swagger
@@ -116,7 +149,7 @@ router.post('/login', loginValidationRules, login);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/register', registerValidationRules, register);
+router.post("/register", registerValidationRules, register);
 
 /**
  * @swagger
@@ -156,10 +189,6 @@ router.post('/register', registerValidationRules, register);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get(
-    '/me',
-    authenticate,  
-    getCurrentUser    
-);
+router.get("/me", authenticate, getCurrentUser);
 
 export default router;

@@ -7,6 +7,7 @@ import {
   getProducts,
   updateProduct,
   deleteProduct,
+  getProductById 
 } from "../controllers/products.js";
 import Category from "../models/Category.js";
 import { upload } from "../middleware/upload.js";
@@ -158,6 +159,34 @@ const router = express.Router();
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get("/", getProductsValidationRules, getProducts);
+
+/**
+ * @swagger
+ * /api/products/{id}:
+ *   get:
+ *     summary: Obtém detalhes de um produto específico por ID.
+ *     tags: [Products]
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: objectid
+ *         description: O ID MongoDB do produto.
+ *     responses:
+ *       '200':
+ *         description: Detalhes do produto.
+ *         content: { application/json: { schema: { $ref: '#/components/schemas/ProductOutput' }}}
+ *       '400': { description: ID inválido, ... }
+ *       '404': { description: Produto não encontrado, ... }
+ *       '500': { description: Erro interno, ... }
+ */
+router.get(
+  '/:id',
+  mongoIdValidation('id', 'ID de produto inválido'),
+  getProductById
+);
 
 /**
  * @swagger

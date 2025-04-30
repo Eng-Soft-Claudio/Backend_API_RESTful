@@ -18,6 +18,19 @@ const userSchema = new mongoose.Schema({
         minlength: 8,
         select: false
     },
+    cpf: {
+        type: String,
+        required: [true, 'CPF é obrigatório.'],
+        unique: true,
+        trim: true,
+        // IMPLANTAR VALIDADOR DE CPF
+        select: false 
+    },
+    birthDate: {
+        type: Date,
+        required: [true, 'Data de nascimento é obrigatória.'],
+        select: false
+    },
     role: {
         type: String,
         enum: ['admin', 'user'],

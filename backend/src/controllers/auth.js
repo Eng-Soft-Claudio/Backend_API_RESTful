@@ -45,7 +45,7 @@ export const login = async (req, res, next) => {
 export const register = async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
+    return res.status(400).json({ status: "fail", errors: errors.array() });
   }
 
   try {
@@ -53,17 +53,26 @@ export const register = async (req, res, next) => {
       name: req.body.name,
       email: req.body.email,
       password: req.body.password,
+      cpf: req.body.cpf.replace(/\D/g, ""),
+      birthDate: req.body.birthDate,
     });
 
     const token = signToken(newUser._id, newUser.role);
 
-    newUser.password = undefined;
+    const userOutput = {
+      _id: newUser._id,
+      name: newUser.name,
+      email: newUser.email,
+      role: newUser.role,
+      createdAt: newUser.createdAt,
+      updatedAt: newUser.updatedAt,
+    };
 
     res.status(201).json({
       status: "success",
       token,
       data: {
-        user: newUser,
+        user: userOutput,
       },
     });
   } catch (err) {

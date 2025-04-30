@@ -136,6 +136,31 @@ export const getProducts = async (req, res, next) => {
 };
 
 /**
+ * @description Obtém um produto pelo seu ID.
+ * @route GET /api/products/:id
+ * @access Public (geralmente)
+ */
+export const getProductById = async (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+  try {
+    const productId = req.params.id;
+    const product = await Product.findById(productId)
+      .populate("category", "name slug")
+      .lean();
+
+    if (!product) {
+      return next(new AppError("Produto não encontrado.", 404));
+    }
+    res.status(200).json(product);
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
  * @description Atualiza um produto existente. Espera que Multer e validações rodem ANTES na rota.
  * @route PUT /api/products/:id
  * @access Admin

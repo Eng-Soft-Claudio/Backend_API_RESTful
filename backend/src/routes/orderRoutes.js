@@ -1,12 +1,15 @@
 //src/routes/orderRoutes.js
 import express from 'express';
 import { body, param } from 'express-validator';
-import { authenticate } from '../middleware/auth.js'; 
+import { authenticate, isAdmin } from '../middleware/auth.js'; 
 import {
     createOrder,
     getMyOrders,
     getOrderById,
-    payOrder
+    payOrder,
+    getAllOrders,             
+    updateOrderToShipped,     
+    updateOrderToDelivered 
 } from '../controllers/orderController.js';
 import Address from '../models/Address.js'; 
 
@@ -208,5 +211,107 @@ router.get(
     orderIdParamValidation,
     getOrderById
 );
+
+/**
+ * @swagger
+ * /api/orders:
+ *   get:
+ *     summary: Lista TODOS os pedidos (Admin).
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 15 }
+ *       - in: query
+ *         name: sort
+ *         schema: { type: string, default: '-createdAt' }
+ *     responses:
+ *       '200':
+ *         description: Lista de pedidos paginada.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               # Defina um schema para a resposta paginada aqui, se desejar
+ *               type: object
+ *               properties:
+ *                  status: { type: string }
+ *                  results: { type: integer }
+ *                  totalOrders: { type: integer }
+ *                  totalPages: { type: integer }
+ *                  currentPage: { type: integer }
+ *                  data:
+ *                      type: object
+ *                      properties:
+ *                          orders:
+ *                              type: array
+ *                              items: { $ref: '#/components/schemas/OrderOutput' }
+ *       # ... respostas 401, 403, 500 ...
+ */
+router.get(
+    '/',
+    authenticate,
+    isAdmin,
+    getAllOrders
+);
+
+/**
+ * @swagger
+ * /api/orders/{id}/ship:
+ *   put:
+ *     summary: Marca um pedido como enviado (Admin).
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - $ref: '#/components/parameters/OrderIdParam'
+ *     responses:
+ *       '200':
+ *         description: Pedido marcado como enviado.
+ *         content:
+ *           application/json:
+ *             schema:
+ *                # ... (schema com status e data: { order })
+ *       # ... respostas 400, 401, 403, 404, 500 ...
+ */
+router.put(
+    '/:id/ship',
+    authenticate,
+    isAdmin,
+    orderIdParamValidation,
+    updateOrderToShipped
+);
+
+/**
+ * @swagger
+ * /api/orders/{id}/deliver:
+ *   put:
+ *     summary: Marca um pedido como entregue (Admin).
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - $ref: '#/components/parameters/OrderIdParam'
+ *     responses:
+ *       '200':
+ *         description: Pedido marcado como entregue.
+ *          content:
+ *           application/json:
+ *             schema:
+ *                # ... (schema com status e data: { order })
+ *       # ... respostas 400, 401, 403, 404, 500 ...
+ */
+router.put(
+    '/:id/deliver',
+    authenticate,
+    isAdmin,
+    orderIdParamValidation,
+    updateOrderToDelivered
+);
+
 
 export default router;

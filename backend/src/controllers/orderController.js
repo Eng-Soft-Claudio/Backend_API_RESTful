@@ -491,4 +491,134 @@ export const getOrderById = async (req, res, next) => {
   }
 };
 
+/**
+ * @description Lista TODOS os pedidos com paginação (Admin).
+ * @route GET /api/orders
+ * @access Admin
+ */
+export const getAllOrders = async (req, res, next) => {
+  // Validação de query params (opcional, pode adicionar em routes se precisar)
+  // const errors = validationResult(req);
+  // if (!errors.isEmpty()) {
+  //     return res.status(400).json({ errors: errors.array() });
+  // }
+
+  try {
+      const { page = 1, limit = 15, sort = '-createdAt' } = req.query; 
+      const currentPageNum = parseInt(page) || 1;
+      const limitNum = parseInt(limit) || 15;
+
+      const filterQuery = {}; // Sem filtro de usuário aqui
+      const sortOptions = sort ? String(sort).split(',').join(' ') : '-createdAt';
+
+      const [orders, totalOrders] = await Promise.all([
+          Order.find(filterQuery)
+               .populate('user', 'name email') 
+               .sort(sortOptions)
+               .limit(limitNum)
+               .skip((currentPageNum - 1) * limitNum)
+               .lean(), 
+          Order.countDocuments(filterQuery)
+      ]);
+
+      const totalPages = Math.ceil(totalOrders / limitNum);
+
+      res.status(200).json({
+          status: 'success',
+          results: orders.length,
+          totalOrders: totalOrders,
+          totalPages: totalPages,
+          currentPage: currentPageNum,
+          data: {
+               orders 
+          }
+      });
+
+  } catch (err) {
+      next(err);
+  }
+};
+
+/**
+* @description Atualiza o status de um pedido para 'shipped' (Admin).
+* @route PUT /api/orders/:id/ship
+* @access Admin
+*/
+export const updateOrderToShipped = async (req, res, next) => {
+  const errors = validationResult(req); // Valida o ID do pedido da rota
+  if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+      const orderId = req.params.id;
+      const order = await Order.findById(orderId);
+
+      if (!order) {
+          return next(new AppError('Pedido não encontrado.', 404));
+      }
+
+      if (!['processing', 'paid'].includes(order.orderStatus)) {
+           return next(new AppError(`Não é possível marcar como enviado um pedido com status '${order.orderStatus}'.`, 400));
+      }
+
+      order.orderStatus = 'shipped';
+      const updatedOrder = await order.save();
+
+      res.status(200).json({
+          status: 'success',
+          data: {
+              order: updatedOrder
+          }
+      });
+
+  } catch (err) {
+       if (err.name === 'CastError') {
+           return next(new AppError(`ID de pedido inválido: ${req.params.id}`, 400));
+       }
+      next(err);
+  }
+};
+
+/**
+* @description Atualiza o status de um pedido para 'delivered' (Admin).
+* @route PUT /api/orders/:id/deliver
+* @access Admin
+*/
+export const updateOrderToDelivered = async (req, res, next) => {
+   const errors = validationResult(req); 
+  if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+  }
+  try {
+      const orderId = req.params.id;
+      const order = await Order.findById(orderId);
+
+      if (!order) {
+          return next(new AppError('Pedido não encontrado.', 404));
+      }
+
+      if (order.orderStatus !== 'shipped') {
+           return next(new AppError(`Só é possível marcar como entregue um pedido com status 'shipped'. Status atual: '${order.orderStatus}'.`, 400));
+      }
+
+      order.orderStatus = 'delivered';
+      order.deliveredAt = new Date(); 
+      const updatedOrder = await order.save();
+
+       res.status(200).json({
+          status: 'success',
+          data: {
+              order: updatedOrder
+          }
+      });
+
+  } catch (err) {
+        if (err.name === 'CastError') {
+           return next(new AppError(`ID de pedido inválido: ${req.params.id}`, 400));
+       }
+      next(err);
+  }
+};
+
 export { returnStockForOrderItems };
