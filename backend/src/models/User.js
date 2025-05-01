@@ -23,7 +23,6 @@ const userSchema = new mongoose.Schema({
         required: [true, 'CPF é obrigatório.'],
         unique: true,
         trim: true,
-        // IMPLANTAR VALIDADOR DE CPF
         select: false 
     },
     birthDate: {

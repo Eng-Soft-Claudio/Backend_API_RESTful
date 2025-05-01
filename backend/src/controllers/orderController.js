@@ -290,10 +290,10 @@ export const payOrder = async (req, res, next) => {
       installments: parseInt(installments) || 1,
       payment_method_id: payment_method_id,
       payer: {
-        email: payer.email,
-        ...(payer.identification &&
-          payer.identification.type &&
-          payer.identification.number && {
+        email: payer?.email,
+        ...(payer?.identification &&
+          payer?.identification.type &&
+          payer?.identification.number && {
             identification: {
               type: payer.identification.type.toUpperCase(),
               number: payer.identification.number.replace(/\D/g, ""),
@@ -305,6 +305,23 @@ export const payOrder = async (req, res, next) => {
       external_reference: order._id.toString(),
       notification_url: process.env.MERCADOPAGO_WEBHOOK_URL,
     };
+
+    if (payment_method_id === "pix") {
+      const expirationMinutes = 30; // Exemplo: 30 minutos para pagar
+      const expirationDate = new Date(
+        Date.now() + expirationMinutes * 60 * 1000
+      );
+      // Formato ISO 8601 com timezone (TZ) - Ajuste se MP esperar outro formato
+      paymentPayload.date_of_expiration = expirationDate.toISOString();
+    }
+    // Adiciona campos específicos de Cartão (se vierem)
+    else {
+      paymentPayload.token = token; // Adiciona token se não for PIX
+      paymentPayload.installments = parseInt(installments) || 1; // Adiciona parcelas se não for PIX
+      if (issuer_id) paymentPayload.issuer_id = issuer_id; // Adiciona issuer_id se veio
+    }
+
+    console.log("Payload para API MP:", paymentPayload);
 
     // 4. Chamar API do Mercado Pago
     const paymentAPI = new Payment(mpClient);
@@ -481,7 +498,7 @@ export const getOrderById = async (req, res, next) => {
       status: "success",
       data: {
         order,
-      }
+      },
     });
   } catch (err) {
     if (err.name === "CastError") {
@@ -504,120 +521,127 @@ export const getAllOrders = async (req, res, next) => {
   // }
 
   try {
-      const { page = 1, limit = 15, sort = '-createdAt' } = req.query; 
-      const currentPageNum = parseInt(page) || 1;
-      const limitNum = parseInt(limit) || 15;
+    const { page = 1, limit = 15, sort = "-createdAt" } = req.query;
+    const currentPageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 15;
 
-      const filterQuery = {}; // Sem filtro de usuário aqui
-      const sortOptions = sort ? String(sort).split(',').join(' ') : '-createdAt';
+    const filterQuery = {}; // Sem filtro de usuário aqui
+    const sortOptions = sort ? String(sort).split(",").join(" ") : "-createdAt";
 
-      const [orders, totalOrders] = await Promise.all([
-          Order.find(filterQuery)
-               .populate('user', 'name email') 
-               .sort(sortOptions)
-               .limit(limitNum)
-               .skip((currentPageNum - 1) * limitNum)
-               .lean(), 
-          Order.countDocuments(filterQuery)
-      ]);
+    const [orders, totalOrders] = await Promise.all([
+      Order.find(filterQuery)
+        .populate("user", "name email")
+        .sort(sortOptions)
+        .limit(limitNum)
+        .skip((currentPageNum - 1) * limitNum)
+        .lean(),
+      Order.countDocuments(filterQuery),
+    ]);
 
-      const totalPages = Math.ceil(totalOrders / limitNum);
+    const totalPages = Math.ceil(totalOrders / limitNum);
 
-      res.status(200).json({
-          status: 'success',
-          results: orders.length,
-          totalOrders: totalOrders,
-          totalPages: totalPages,
-          currentPage: currentPageNum,
-          data: {
-               orders 
-          }
-      });
-
+    res.status(200).json({
+      status: "success",
+      results: orders.length,
+      totalOrders: totalOrders,
+      totalPages: totalPages,
+      currentPage: currentPageNum,
+      data: {
+        orders,
+      },
+    });
   } catch (err) {
-      next(err);
+    next(err);
   }
 };
 
 /**
-* @description Atualiza o status de um pedido para 'shipped' (Admin).
-* @route PUT /api/orders/:id/ship
-* @access Admin
-*/
+ * @description Atualiza o status de um pedido para 'shipped' (Admin).
+ * @route PUT /api/orders/:id/ship
+ * @access Admin
+ */
 export const updateOrderToShipped = async (req, res, next) => {
   const errors = validationResult(req); // Valida o ID do pedido da rota
   if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+    return res.status(400).json({ errors: errors.array() });
   }
 
   try {
-      const orderId = req.params.id;
-      const order = await Order.findById(orderId);
+    const orderId = req.params.id;
+    const order = await Order.findById(orderId);
 
-      if (!order) {
-          return next(new AppError('Pedido não encontrado.', 404));
-      }
+    if (!order) {
+      return next(new AppError("Pedido não encontrado.", 404));
+    }
 
-      if (!['processing', 'paid'].includes(order.orderStatus)) {
-           return next(new AppError(`Não é possível marcar como enviado um pedido com status '${order.orderStatus}'.`, 400));
-      }
+    if (!["processing", "paid"].includes(order.orderStatus)) {
+      return next(
+        new AppError(
+          `Não é possível marcar como enviado um pedido com status '${order.orderStatus}'.`,
+          400
+        )
+      );
+    }
 
-      order.orderStatus = 'shipped';
-      const updatedOrder = await order.save();
+    order.orderStatus = "shipped";
+    const updatedOrder = await order.save();
 
-      res.status(200).json({
-          status: 'success',
-          data: {
-              order: updatedOrder
-          }
-      });
-
+    res.status(200).json({
+      status: "success",
+      data: {
+        order: updatedOrder,
+      },
+    });
   } catch (err) {
-       if (err.name === 'CastError') {
-           return next(new AppError(`ID de pedido inválido: ${req.params.id}`, 400));
-       }
-      next(err);
+    if (err.name === "CastError") {
+      return next(new AppError(`ID de pedido inválido: ${req.params.id}`, 400));
+    }
+    next(err);
   }
 };
 
 /**
-* @description Atualiza o status de um pedido para 'delivered' (Admin).
-* @route PUT /api/orders/:id/deliver
-* @access Admin
-*/
+ * @description Atualiza o status de um pedido para 'delivered' (Admin).
+ * @route PUT /api/orders/:id/deliver
+ * @access Admin
+ */
 export const updateOrderToDelivered = async (req, res, next) => {
-   const errors = validationResult(req); 
+  const errors = validationResult(req);
   if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+    return res.status(400).json({ errors: errors.array() });
   }
   try {
-      const orderId = req.params.id;
-      const order = await Order.findById(orderId);
+    const orderId = req.params.id;
+    const order = await Order.findById(orderId);
 
-      if (!order) {
-          return next(new AppError('Pedido não encontrado.', 404));
-      }
+    if (!order) {
+      return next(new AppError("Pedido não encontrado.", 404));
+    }
 
-      if (order.orderStatus !== 'shipped') {
-           return next(new AppError(`Só é possível marcar como entregue um pedido com status 'shipped'. Status atual: '${order.orderStatus}'.`, 400));
-      }
+    if (order.orderStatus !== "shipped") {
+      return next(
+        new AppError(
+          `Só é possível marcar como entregue um pedido com status 'shipped'. Status atual: '${order.orderStatus}'.`,
+          400
+        )
+      );
+    }
 
-      order.orderStatus = 'delivered';
-      order.deliveredAt = new Date(); 
-      const updatedOrder = await order.save();
+    order.orderStatus = "delivered";
+    order.deliveredAt = new Date();
+    const updatedOrder = await order.save();
 
-       res.status(200).json({
-          status: 'success',
-          data: {
-              order: updatedOrder
-          }
-      });
-
+    res.status(200).json({
+      status: "success",
+      data: {
+        order: updatedOrder,
+      },
+    });
   } catch (err) {
-        if (err.name === 'CastError') {
-           return next(new AppError(`ID de pedido inválido: ${req.params.id}`, 400));
-       }
-      next(err);
+    if (err.name === "CastError") {
+      return next(new AppError(`ID de pedido inválido: ${req.params.id}`, 400));
+    }
+    next(err);
   }
 };
 
