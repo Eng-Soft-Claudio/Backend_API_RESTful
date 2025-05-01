@@ -11,99 +11,126 @@ import Category from '../models/Category.js';
 import User from '../models/User.js';
 
 // Mocking Cloudinary
-import { uploadImage, deleteImage } from '../utils/cloudinary.js';
+jest.mock('../utils/cloudinary.js', () => ({
+  uploadImage: jest.fn(),
+  deleteImage: jest.fn(),
+  __esModule: true,
+}));
+
+const { uploadImage, deleteImage } = require('../utils/cloudinary.js');
 
 // Variáveis globais
 let mongoServer;
-let categoryId, categoryId2, categorySlug;
+let categoryId;
+let categoryId2;
+let categorySlug;
 let adminToken;
 let userToken;
+let adminUserId;
+let normalUserId;
 
-
-// --- Obter Caminho & Arquivo Dummy ---
-const uploadsDir = path.join(process.cwd(), 'src', 'tests', 'test-uploads');
+// --- Caminho & Arquivo Dummy ---
+const uploadsDir = path.join(__dirname, 'test-uploads');
 const dummyImagePath = path.join(uploadsDir, 'dummy.jpg');
 
 
+// --- Dados de Usuário Válidos para Teste ---
+const adminUserData = {
+  name: "Admin ProdTest",
+  email: "admin.prod@test.com",
+  password: "password123",
+  role: "admin",
+  cpf: "97095333041",
+  birthDate: "1980-01-01",
+};
+const normalUserData = {
+  name: "User ProdTest",
+  email: "user.prod@test.com",
+  password: "password123",
+  role: "user",
+  cpf: "46510183005",
+  birthDate: "1995-05-05",
+};
 
 // --- Setup e Teardown ---
 beforeAll(async () => {
-
-    try {
-        // Garante que o diretório exista (cria recursivamente se necessário)
-        fs.mkdirSync(uploadsDir, { recursive: true });
-        // Cria/Sobrescreve o arquivo dummy
-        fs.writeFileSync(dummyImagePath, 'test content');
-        // Verifica se realmente existe APÓS a criação
-        if (!fs.existsSync(dummyImagePath)) {
-            throw new Error(`Falha CRÍTICA ao criar arquivo dummy: ${dummyImagePath}`);
-        }
-    } catch (err) {
-        throw err; // Falha o setup se não conseguir criar
+  try {
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
     }
+    fs.writeFileSync(dummyImagePath, 'test content');
+  } catch (err) {
+    console.error("Falha ao criar diretório/arquivo dummy:", err);
+    throw err;
+  }
 
-    // --- Conexão com DB e Setup de Dados ---
-    mongoServer = await MongoMemoryServer.create();
-    const mongoUri = mongoServer.getUri();
-    await mongoose.connect(mongoUri);
+  mongoServer = await MongoMemoryServer.create();
+  const mongoUri = mongoServer.getUri();
+  await mongoose.connect(mongoUri);
 
-    // --- Garantir JWT_SECRET ---
-    if (!process.env.JWT_SECRET) {
-        process.env.JWT_SECRET = 'este-e-um-segredo-super-secreto-apenas-para-testes-12345!@';
+  if (!process.env.JWT_SECRET) {
+    process.env.JWT_SECRET = 'este-e-um-segredo-super-secreto-apenas-para-testes-12345!@';
+    console.warn('JWT_SECRET não definido, usando valor padrão para testes de product.');
+  }
+
+  await Promise.all([
+    User.deleteMany({}),
+    Product.deleteMany({}),
+    Category.deleteMany({}),
+  ]);
+
+  const [testCategory, testCategory2, adminUser, normalUser] = await Promise.all([
+    Category.create({ name: 'Categoria Teste Prod' }),
+    Category.create({ name: 'Outra Categoria' }),
+    User.create(adminUserData),
+    User.create(normalUserData),
+  ]);
+
+  categoryId = testCategory._id;
+  categoryId2 = testCategory2._id;
+  categorySlug = testCategory.slug;
+  adminUserId = adminUser._id;
+  normalUserId = normalUser._id;
+
+  adminToken = jwt.sign({ id: adminUser._id, role: adminUser.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
+  userToken = jwt.sign({ id: normalUser._id, role: normalUser.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+  try {
+    await Product.collection.createIndex({ name: 'text', description: 'text' });
+  } catch (indexErr) {
+    if (indexErr.codeName !== 'IndexAlreadyExists') {
+      console.warn("Aviso ao criar índice de texto:", indexErr.message);
     }
-
-    // --- Limpeza inicial ---
-    await User.deleteMany({});
-    await Product.deleteMany({});
-    await Category.deleteMany({});
-
-    // --- Criar dados base ---
-    const testCategory = await Category.create({ name: 'Categoria Teste Prod' });
-    const testCategory2 = await Category.create({ name: 'Outra Categoria' });
-    categoryId = testCategory._id;
-    categoryId2 = testCategory2._id;
-    categorySlug = testCategory.slug;
-    const adminData = { name: 'Admin ProdTest', email: 'admin.prod@test.com', password: 'password123', role: 'admin' };
-    const userData = { name: 'User ProdTest', email: 'user.prod@test.com', password: 'password123', role: 'user' };
-    const adminUser = await User.create(adminData);
-    const normalUser = await User.create(userData);
-    adminToken = jwt.sign({ id: adminUser._id, role: adminUser.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
-    userToken = jwt.sign({ id: normalUser._id, role: normalUser.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
-
-    // Criação do Índice de Texto
-    try {
-        await Product.collection.createIndex({ name: 'text', description: 'text' });
-    } catch (indexErr) {
-        // Ignorar erro se índice já existir (comum em execuções repetidas)
-        if (indexErr.codeName !== 'IndexAlreadyExists') {
-        }
-    }
+  }
 });
 
 beforeEach(async () => {
-    // Limpar mocks
-    uploadImage.mockClear();
-    deleteImage.mockClear();
-    uploadImage.mockResolvedValue({ secure_url: 'http://fake.cloudinary.com/image.jpg', public_id: 'fake_public_id' });
-    deleteImage.mockResolvedValue({ result: 'ok' });
-    // Limpar produtos
-    await Product.deleteMany({});
+  jest.clearAllMocks();
+  uploadImage.mockResolvedValue({
+    secure_url: 'http://fake.cloudinary.com/image.jpg',
+    public_id: 'fake_public_id',
+  });
+  deleteImage.mockResolvedValue({ result: 'ok' });
+  await Product.deleteMany({});
 });
 
 afterAll(async () => {
-    // Limpeza final
-    await User.deleteMany({});
-    await Category.deleteMany({});
-    await Product.deleteMany({});
-    await mongoose.disconnect();
-    await mongoServer.stop();
-    // Limpar arquivo e diretório dummy
-    try {
-        if (fs.existsSync(dummyImagePath)) fs.unlinkSync(dummyImagePath);
-        if (fs.existsSync(uploadsDir)) fs.rmdirSync(uploadsDir);
-    } catch (cleanupErr) {
-        try { fs.rmSync(uploadsDir, { recursive: true, force: true }); } catch (e) { }
+  await User.deleteMany({});
+  await Category.deleteMany({});
+  await Product.deleteMany({});
+  await mongoose.disconnect();
+  await mongoServer.stop();
+  try {
+    if (fs.existsSync(dummyImagePath)) fs.unlinkSync(dummyImagePath);
+    if (fs.existsSync(uploadsDir) && fs.readdirSync(uploadsDir).length === 0) {
+        fs.rmdirSync(uploadsDir);
+    } else if (fs.existsSync(uploadsDir)) {
+        fs.rmSync(uploadsDir, { recursive: true, force: true });
     }
+  } catch (cleanupErr) {
+    console.error('Erro ao limpar diretório/arquivo dummy:', cleanupErr);
+     try { fs.rmSync(uploadsDir, { recursive: true, force: true }); } catch (e) {}
+  }
 });
 
 // --- Testes ---
@@ -113,15 +140,15 @@ describe('/api/products', () => {
     describe('GET /', () => {
 
         beforeEach(async () => {
-            let prodA, prodB, prodC;
-            // Limpar produtos antes de criar para este bloco GET
             await Product.deleteMany({});
-            prodA = await Product.create({ name: 'Laptop X', price: 1500, category: categoryId, image: 'lx.jpg', description: 'Bom laptop' });
-            prodB = await Product.create({ name: 'Mouse Y', price: 50, category: categoryId, image: 'my.jpg', description: 'Mouse bom' });
-            prodC = await Product.create({ name: 'Teclado Z', price: 100, category: categoryId2, image: 'tz.jpg', description: 'Teclado ótimo' });
+            await Product.create([
+                { name: 'Laptop X', price: 1500, category: categoryId, image: 'lx.jpg', description: 'Bom laptop' },
+                { name: 'Mouse Y', price: 50, category: categoryId, image: 'my.jpg', description: 'Mouse bom' },
+                { name: 'Teclado Z', price: 100, category: categoryId2, image: 'tz.jpg', description: 'Teclado ótimo' }
+            ]);
         });
 
-        it('deve retornar uma lista de produtos existentes', async () => {
+        it('deve retornar uma lista de produtos existentes com categorias populadas', async () => {
             const res = await request(app)
                 .get('/api/products')
                 .expect('Content-Type', /json/)
@@ -135,11 +162,12 @@ describe('/api/products', () => {
             const laptop = res.body.products.find(p => p.name === 'Laptop X');
             expect(laptop.category).toBeDefined();
             expect(laptop.category.name).toBe('Categoria Teste Prod');
+            expect(laptop.category.slug).toBeDefined();
         });
 
         it('deve filtrar produtos por categoria (usando ID)', async () => {
             const res = await request(app)
-                .get(`/api/products?category=${categoryId}`)
+                .get(`/api/products?category=${categoryId.toString()}`)
                 .expect(200);
 
             expect(res.body.results).toBe(2);
@@ -162,7 +190,7 @@ describe('/api/products', () => {
         it('deve retornar vazio e mensagem apropriada se a categoria do filtro não existir', async () => {
             const nonExistentId = new mongoose.Types.ObjectId();
             const res = await request(app)
-                .get(`/api/products?category=${nonExistentId}`)
+                .get(`/api/products?category=${nonExistentId.toString()}`)
                 .expect(200);
 
             expect(res.body).toHaveProperty('status', 'success');
@@ -173,14 +201,12 @@ describe('/api/products', () => {
         });
 
         it('deve suportar paginação (limit e page)', async () => {
-            // Teste de limite
             let res = await request(app).get(`/api/products?limit=2`).expect(200);
             expect(res.body.results).toBe(2);
             expect(res.body.products).toHaveLength(2);
             expect(res.body.totalPages).toBe(2);
             expect(res.body.currentPage).toBe(1);
 
-            // Teste de página
             res = await request(app).get(`/api/products?limit=2&page=2`).expect(200);
             expect(res.body.results).toBe(1);
             expect(res.body.products).toHaveLength(1);
@@ -207,11 +233,24 @@ describe('/api/products', () => {
             expect(res.body.products[2].name).toBe('Laptop X');
         });
 
-        it('deve buscar produtos por termo (q)', async () => {
+        it('deve buscar produtos por termo (q) no nome', async () => {
             const res = await request(app).get('/api/products?q=laptop').expect(200);
             expect(res.body.results).toBe(1);
             expect(res.body.products).toHaveLength(1);
             expect(res.body.products[0].name).toBe('Laptop X');
+        });
+
+         it('deve buscar produtos por termo (q) na descrição', async () => {
+            const res = await request(app).get('/api/products?q=ótimo').expect(200);
+            expect(res.body.results).toBe(1);
+            expect(res.body.products).toHaveLength(1);
+            expect(res.body.products[0].name).toBe('Teclado Z');
+        });
+
+         it('deve retornar vazio se termo de busca (q) não encontrar nada', async () => {
+            const res = await request(app).get('/api/products?q=inexistente').expect(200);
+            expect(res.body.results).toBe(0);
+            expect(res.body.products).toHaveLength(0);
         });
     });
 
@@ -248,7 +287,7 @@ describe('/api/products', () => {
             expect(res.body.imagePublicId).toBe('fake_public_id');
 
             expect(uploadImage).toHaveBeenCalledTimes(1);
-            expect(uploadImage).toHaveBeenCalledWith(expect.any(String));
+            expect(uploadImage).toHaveBeenCalledWith(expect.stringContaining('uploads_temp'));
 
 
             const dbProduct = await Product.findById(res.body._id);
@@ -258,30 +297,66 @@ describe('/api/products', () => {
         });
 
         it('Deve retornar 400 se a imagem estiver faltando', async () => {
-            await request(app)
+            const res = await request(app)
                 .post('/api/products')
                 .set('Authorization', `Bearer ${adminToken}`)
                 .field('name', 'Teste Sem Imagem')
                 .field('price', '10.00')
                 .field('category', categoryId.toString())
                 .expect(400);
+
+             expect(res.body.message).toMatch(/Imagem do produto é obrigatória/i);
             expect(uploadImage).not.toHaveBeenCalled();
         });
 
         it('Deve retornar 400 se o nome estiver faltando', async () => {
-            await request(app)
+            const res = await request(app)
                 .post('/api/products')
                 .set('Authorization', `Bearer ${adminToken}`)
                 .field('price', '20.00')
                 .field('category', categoryId.toString())
                 .attach('image', dummyImagePath)
                 .expect(400);
+
+             expect(res.body.errors).toBeInstanceOf(Array);
+             expect(res.body.errors[0].path).toBe('name');
             expect(uploadImage).not.toHaveBeenCalled();
         });
 
+         it('Deve retornar 400 se o preço for inválido (zero ou negativo)', async () => {
+           const res = await request(app)
+               .post('/api/products')
+               .set('Authorization', `Bearer ${adminToken}`)
+               .field('name', 'Preço Zero')
+               .field('price', '0')
+               .field('category', categoryId.toString())
+               .attach('image', dummyImagePath)
+               .expect(400);
+
+           expect(res.body.errors).toBeInstanceOf(Array);
+           expect(res.body.errors[0].path).toBe('price');
+           expect(res.body.errors[0].msg).toMatch(/Preço deve ser maior que zero/i);
+         });
+
+         it('Deve retornar 400 se o estoque for inválido (negativo)', async () => {
+            const res = await request(app)
+                .post('/api/products')
+                .set('Authorization', `Bearer ${adminToken}`)
+                .field('name', 'Estoque Negativo')
+                .field('price', '10')
+                .field('category', categoryId.toString())
+                .field('stock', '-5')
+                .attach('image', dummyImagePath)
+                .expect(400);
+
+            expect(res.body.errors).toBeInstanceOf(Array);
+            expect(res.body.errors[0].path).toBe('stock');
+            expect(res.body.errors[0].msg).toMatch(/Estoque não pode ser negativo/i);
+         });
+
         it('Deve retornar 400 se a categoria (ID válido) não existir no DB', async () => {
             const nonExistentCategoryId = new mongoose.Types.ObjectId();
-            await request(app)
+            const res = await request(app)
                 .post('/api/products')
                 .set('Authorization', `Bearer ${adminToken}`)
                 .field('name', 'Teste Categoria Inválida')
@@ -289,6 +364,10 @@ describe('/api/products', () => {
                 .field('category', nonExistentCategoryId.toString())
                 .attach('image', dummyImagePath)
                 .expect(400);
+
+             expect(res.body.errors).toBeInstanceOf(Array);
+             expect(res.body.errors[0].path).toBe('category');
+             expect(res.body.errors[0].msg).toMatch(/Categoria não encontrada/i);
         });
 
         it('Usuário normal NÃO deve conseguir criar produto (403)', async () => {
@@ -300,6 +379,8 @@ describe('/api/products', () => {
                 .field('category', categoryId.toString())
                 .attach('image', dummyImagePath)
                 .expect(403);
+           expect(uploadImage).not.toHaveBeenCalled();
+           expect(deleteImage).not.toHaveBeenCalled();
         });
 
         it('Deve retornar 401 se não houver token', async () => {
@@ -316,7 +397,7 @@ describe('/api/products', () => {
     // --- Testes PUT /:id ---
     describe('PUT /:id', () => {
         let testProductId;
-        let initialPublicId = 'initial_public_id';
+        const initialPublicId = 'initial_public_id';
 
         beforeEach(async () => {
             const product = await Product.create({
@@ -351,39 +432,36 @@ describe('/api/products', () => {
                 .expect('Content-Type', /json/)
                 .expect(200);
 
-            // Verifica resposta    
             expect(res.body.name).toBe(updates.name);
             expect(res.body.price).toBe(Number(updates.price));
             expect(res.body.stock).toBe(Number(updates.stock));
             expect(res.body.image).toBe('http://new.cloudinary.com/new_image.jpg');
             expect(res.body.imagePublicId).toBe('new_public_id');
-            // Verifica mocks
             expect(deleteImage).toHaveBeenCalledTimes(1);
             expect(deleteImage).toHaveBeenCalledWith(initialPublicId);
             expect(uploadImage).toHaveBeenCalledTimes(1);
-            // Verifica DB
+            expect(uploadImage).toHaveBeenCalledWith(expect.stringContaining('uploads_temp'));
+
             const dbProduct = await Product.findById(testProductId);
             expect(dbProduct.name).toBe(updates.name);
             expect(dbProduct.imagePublicId).toBe('new_public_id');
         });
 
         it('Admin deve atualizar apenas campos (sem nova imagem) com sucesso', async () => {
-            const updates = { description: 'Nova Descrição' };
+            const updates = { description: 'Nova Descrição PUT' };
 
             const res = await request(app)
                 .put(`/api/products/${testProductId}`)
                 .set('Authorization', `Bearer ${adminToken}`)
                 .field('description', updates.description)
                 .expect(200);
-            // Verifica mocks de imagem NÃO foram chamados
+
             expect(deleteImage).not.toHaveBeenCalled();
             expect(uploadImage).not.toHaveBeenCalled();
-            // Verifica resposta
             expect(res.body.description).toBe(updates.description);
-            // Imagem original permanece
             expect(res.body.image).toBe('http://original.com/image.jpg');
             expect(res.body.imagePublicId).toBe(initialPublicId);
-            // Verifica DB
+
             const dbProduct = await Product.findById(testProductId);
             expect(dbProduct.description).toBe(updates.description);
             expect(dbProduct.imagePublicId).toBe(initialPublicId);
@@ -391,12 +469,16 @@ describe('/api/products', () => {
 
         it('Deve retornar 404 se o ID do produto não existir', async () => {
             const nonExistentId = new mongoose.Types.ObjectId();
-            await request(app)
+            const res = await request(app)
                 .put(`/api/products/${nonExistentId}`)
                 .set('Authorization', `Bearer ${adminToken}`)
                 .field('name', 'Tentativa Update')
                 .attach('image', dummyImagePath)
                 .expect(404);
+
+             expect(res.body.message).toMatch(/Produto não encontrado/i);
+             expect(uploadImage).not.toHaveBeenCalled();
+             expect(deleteImage).not.toHaveBeenCalled();
         });
 
         it('Usuário normal NÃO deve conseguir atualizar produto (403)', async () => {
@@ -406,31 +488,50 @@ describe('/api/products', () => {
                 .field('name', 'Tentativa Update User')
                 .attach('image', dummyImagePath)
                 .expect(403);
+            expect(uploadImage).not.toHaveBeenCalled();
+            expect(deleteImage).not.toHaveBeenCalled();
         });
 
         it('Deve retornar 400 se ID for inválido', async () => {
-            await request(app)
+            const res = await request(app)
                 .put('/api/products/invalid-id')
                 .set('Authorization', `Bearer ${adminToken}`)
                 .field('name', 'Update ID Inválido')
                 .attach('image', dummyImagePath)
                 .expect(400);
+
+           expect(res.body.errors).toBeInstanceOf(Array);
+           expect(res.body.errors[0].msg).toMatch(/ID de produto inválido/i);
+           expect(uploadImage).not.toHaveBeenCalled();
+           expect(deleteImage).not.toHaveBeenCalled();
         });
 
         it('Deve retornar 400 se tentar atualizar para categoria inexistente', async () => {
             const nonExistentCategoryId = new mongoose.Types.ObjectId();
-            await request(app)
+            const res = await request(app)
                 .put(`/api/products/${testProductId}`)
                 .set('Authorization', `Bearer ${adminToken}`)
                 .field('category', nonExistentCategoryId.toString())
                 .expect(400);
+
+            expect(res.body.errors).toBeInstanceOf(Array);
+            expect(res.body.errors[0].path).toBe('category');
+            expect(res.body.errors[0].msg).toMatch(/Categoria não encontrada/i);
+        });
+
+         it('Deve retornar 401 sem token', async () => {
+            await request(app)
+                .put(`/api/products/${testProductId}`)
+                .field('name', 'Update Sem Token')
+                .attach('image', dummyImagePath)
+                .expect(401);
         });
     });
 
     // --- Testes DELETE /:id ---
     describe('DELETE /:id', () => {
         let testProductId;
-        let publicIdToDelete = 'public_id_to_delete';
+        const publicIdToDelete = 'public_id_to_delete';
 
         beforeEach(async () => {
             const product = await Product.create({
@@ -438,30 +539,35 @@ describe('/api/products', () => {
                 price: 10,
                 category: categoryId,
                 image: 'http://delete.me/image.jpg',
-                imagePublicId: publicIdToDelete
+                imagePublicId: publicIdToDelete,
+                stock: 5,
             });
             testProductId = product._id;
         });
 
-        it('Admin deve deletar produto com sucesso', async () => {
-            await request(app)
+        it('Admin deve deletar produto com sucesso e sua imagem', async () => {
+            const res = await request(app)
                 .delete(`/api/products/${testProductId}`)
                 .set('Authorization', `Bearer ${adminToken}`)
                 .expect(200);
-            // Verifica mocks
+
+            expect(res.body.status).toBe('success');
+            expect(res.body.message).toMatch(/Produto removido com sucesso/i);
             expect(deleteImage).toHaveBeenCalledTimes(1);
             expect(deleteImage).toHaveBeenCalledWith(publicIdToDelete);
-            // Verifica DB
+
             const dbProduct = await Product.findById(testProductId);
             expect(dbProduct).toBeNull();
         });
 
         it('Deve retornar 404 se o ID do produto não existir', async () => {
             const nonExistentId = new mongoose.Types.ObjectId();
-            await request(app)
+            const res = await request(app)
                 .delete(`/api/products/${nonExistentId}`)
                 .set('Authorization', `Bearer ${adminToken}`)
                 .expect(404);
+
+             expect(res.body.message).toMatch(/Produto não encontrado/i);
             expect(deleteImage).not.toHaveBeenCalled();
         });
 
@@ -473,32 +579,66 @@ describe('/api/products', () => {
             expect(deleteImage).not.toHaveBeenCalled();
         });
 
-        it('Deve funcionar mesmo se produto não tiver publicId (apenas loga warn)', async () => {
-            // Cria produto sem publicId
+        it('Deve funcionar mesmo se produto não tiver imagePublicId (apenas não chama deleteImage)', async () => {
             const productNoPublicId = await Product.create({
                 name: 'Sem Public ID Del', price: 5, category: categoryId, image: 'no_id_del.jpg'
-                // Sem imagePublicId
             });
 
-            await request(app)
+            const res = await request(app)
                 .delete(`/api/products/${productNoPublicId._id}`)
                 .set('Authorization', `Bearer ${adminToken}`)
-                .expect(200); // Ou 204
+                .expect(200);
 
-            expect(deleteImage).not.toHaveBeenCalled(); // Não deve ser chamado
+            expect(res.body.message).toMatch(/Produto removido com sucesso/i);
+            expect(deleteImage).not.toHaveBeenCalled();
 
-            // Verifica DB
             const dbProduct = await Product.findById(productNoPublicId._id);
             expect(dbProduct).toBeNull();
         });
 
         it('Deve retornar 400 se ID for inválido', async () => {
-            await request(app)
+           const res = await request(app)
                 .delete('/api/products/invalid-id')
                 .set('Authorization', `Bearer ${adminToken}`)
                 .expect(400);
+            expect(res.body.errors).toBeInstanceOf(Array);
+            expect(res.body.errors[0].msg).toMatch(/ID de produto inválido/i);
+        });
+
+         it('Deve retornar 401 sem token', async () => {
+            await request(app)
+                .delete(`/api/products/${testProductId}`)
+                .expect(401);
         });
     });
-});
 
+     // --- Teste GET /:id (Público) ---
+     describe('GET /:id (Public)', () => {
+        let publicProductId;
 
+        // CORREÇÃO: Usar beforeEach para garantir que o produto exista
+        beforeEach(async () => {
+             await Product.deleteMany({});
+             const publicProduct = await Product.create({
+                name: 'Produto Público Teste',
+                price: 19.99,
+                category: categoryId,
+                image: 'public.jpg',
+                stock: 100
+            });
+            publicProductId = publicProduct._id;
+        });
+
+         it('Qualquer usuário (ou ninguém) deve conseguir obter um produto por ID', async () => {
+             const res = await request(app)
+                .get(`/api/products/${publicProductId}`)
+                .expect('Content-Type', /json/)
+                .expect(200);
+
+             expect(res.body.name).toBe('Produto Público Teste');
+             expect(res.body._id.toString()).toBe(publicProductId.toString());
+             expect(res.body.category).toBeDefined();
+         });
+    });
+
+}); // Fim describe /api/products

@@ -1,7 +1,7 @@
 //src/routes/auth.js
 import express from "express";
 import { body } from "express-validator";
-import { login, register, getCurrentUser } from "../controllers/auth.js";
+import { login, register, getCurrentUser } from "../controllers/authController.js";
 import { authenticate } from "../middleware/auth.js";
 import User from "../models/User.js";
 import { cpf } from "cpf-cnpj-validator";
@@ -13,6 +13,7 @@ const loginValidationRules = [
   body("email", "Email inválido").isEmail().normalizeEmail(),
   body("password", "Senha é obrigatória").notEmpty(),
 ];
+
 const registerValidationRules = [
   body("name", "Nome é obrigatório").trim().notEmpty(),
   body("email", "Email inválido")
@@ -27,38 +28,57 @@ const registerValidationRules = [
   body("password", "Senha deve ter no mínimo 8 caracteres")
     .isLength({ min: 8 })
     .trim(),
-  body("cpf", "CPF inválido")
+  body(
+    "passwordConfirm",
+    "Confirmação de senha é obrigatória e deve coincidir com a senha"
+  )
+    .notEmpty()
+    .withMessage("Confirmação de senha é obrigatória.")
+    .custom((value, { req }) => {
+      if (value !== req.body.password) {
+        throw new Error("As senhas não coincidem.");
+      }
+      return true;
+    }),
+  body("cpf")
     .trim()
     .notEmpty()
     .withMessage("CPF é obrigatório.")
-    .isLength({ min: 11, max: 14 })
-    .withMessage("Formato de CPF inválido.")
     .custom((value) => {
       const cpfDigits = value.replace(/\D/g, "");
       if (!cpf.isValid(cpfDigits)) {
-        throw new Error("CPF inválido.");
+        throw new Error("CPF inválido (formato ou dígito verificador).");
       }
       return true;
-    })
-    .custom(async (value) => {
-      const cpfDigits = value.replace(/\D/g, "");
-      const user = await User.findOne({ cpf: cpfDigits });
-      if (user) {
-        return Promise.reject("Este CPF já está registrado.");
-      }
     }),
+  body("cpf").custom(async (value) => {
+    const cpfDigits = value.replace(/\D/g, "");
+    const user = await User.findOne({ cpf: cpfDigits });
+    if (user) {
+      return Promise.reject("Este CPF já está registrado.");
+    }
+  }),
   body("birthDate", "Data de nascimento inválida")
     .trim()
     .notEmpty()
     .withMessage("Data de nascimento é obrigatória.")
     .isISO8601()
-    .toDate() 
+    .withMessage("Formato de data inválido (use AAAA-MM-DD).")
+    .toDate()
     .custom((value) => {
+      if (!(value instanceof Date && !isNaN(value))) {
+        throw new Error("Data de nascimento inválida após conversão.");
+      }
       const today = new Date();
-      const birthDate = new Date(value);
-      let age = today.getFullYear() - birthDate.getFullYear();
-      const m = today.getMonth() - birthDate.getMonth();
-      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      today.setHours(0, 0, 0, 0);
+      const birthDateOnly = new Date(
+        value.getFullYear(),
+        value.getMonth(),
+        value.getDate()
+      );
+      let age = today.getFullYear() - birthDateOnly.getFullYear();
+      const m = today.getMonth() - birthDateOnly.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birthDateOnly.getDate())) {
         age--;
       }
       if (age < 16) {

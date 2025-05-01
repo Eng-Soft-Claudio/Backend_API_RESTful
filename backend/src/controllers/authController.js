@@ -48,15 +48,16 @@ export const register = async (req, res, next) => {
     return res.status(400).json({ status: "fail", errors: errors.array() });
   }
 
-  try {
-    const newUser = await User.create({
-      name: req.body.name,
-      email: req.body.email,
-      password: req.body.password,
-      cpf: req.body.cpf.replace(/\D/g, ""),
-      birthDate: req.body.birthDate,
-    });
+  const userDataToCreate = {
+    name: req.body.name,
+    email: req.body.email,
+    password: req.body.password,
+    cpf: req.body.cpf.replace(/\D/g, ""),
+    birthDate: req.body.birthDate,
+  };
 
+  try {
+    const newUser = await User.create(userDataToCreate);
     const token = signToken(newUser._id, newUser.role);
 
     const userOutput = {
@@ -77,7 +78,12 @@ export const register = async (req, res, next) => {
     });
   } catch (err) {
     if (err.code === 11000) {
-      return next(new AppError("Este email já está registrado.", 409));
+      let field = "desconhecido";
+      if (err.message.includes("email")) field = "email";
+      else if (err.message.includes("cpf")) field = "CPF";
+      return next(
+        new AppError(`Este ${field} já está registrado (erro DB).`, 409)
+      );
     }
     next(err);
   }

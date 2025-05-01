@@ -1,33 +1,32 @@
 // src/middleware/errorHandler.js
 import AppError from "../utils/appError.js";
+import mongoose from "mongoose";
 
 // --- Funções Handler Específicas ---
 
 // Trata erro de Cast (ID mal formatado) do Mongoose
 const handleCastErrorDB = (err) => {
-  const message = `Recurso inválido. Valor '${err.value}' não é um ${err.kind} válido para o campo '${err.path}'.`;
+  const message = `O valor '${err.value}' não é válido para o campo '${err.path}'.`;
   return new AppError(message, 400);
 };
 
 // Trata erro de campo duplicado (unique: true) do MongoDB (código 11000)
 const handleDuplicateFieldsDB = (err) => {
-  let value = "desconhecido";
-  if (err.keyValue) {
-    const key = Object.keys(err.keyValue)[0];
-    value = err.keyValue[key];
-  } else if (err.message) {
-    const match = err.message.match(/(["'])(?:(?=(\\?))\2.)*?\1/);
-    if (match) value = match[0];
-  }
+  let value = "Valor desconhecido";
+  let field = "Campo desconhecido";
 
-  const message = `Valor duplicado: '${value}'. Este campo já existe e deve ser único.`;
-  return new AppError(message, 409);
+  if (err.keyValue) {
+    field = Object.keys(err.keyValue)[0];
+    value = err.keyValue[field];
+  }
+  const message = `O campo '${field}' já existe com o valor '${value}'.`;
+  return new AppError(message, 400);
 };
 
 // Trata erros de validação do Schema Mongoose (required, min, max, enum, etc.)
 const handleValidationErrorDB = (err) => {
   const errors = Object.values(err.errors).map((el) => el.message);
-  const message = `Dados inválidos na entrada: ${errors.join(". ")}`;
+  const message = `Dados inválidos: ${errors.join(". ")}`;
   return new AppError(message, 400);
 };
 
@@ -40,17 +39,33 @@ const handleJWTExpiredError = () =>
   new AppError("Sua sessão expirou. Por favor, faça login novamente.", 401);
 
 // --- Funções de Envio de Resposta ---
+
+// Envia erro detalhado em ambiente de desenvolvimento ou teste
 const sendErrorDev = (err, res) => {
-  if (process.env.NODE_ENV !== "test") {
+  if (process.env.NODE_ENV !== 'test') {
+    console.error('ERROR 💥', err);
   }
-  res.status(err.statusCode || 500).json({
-    status: err.status || "error",
-    error: err,
+
+  const responseBody = {
+    status: err.status || 'error',
     message: err.message,
-    stack: err.stack,
-  });
+    ...(err.name !== 'Error' && { errorName: err.name }),
+    ...(err.code && { errorCode: err.code }),
+    ...(err.path && { errorPath: err.path }),
+    ...(err.value && { errorValue: err.value }),
+    ...(err.keyValue && { errorKeyValue: err.keyValue }),
+    isOperational: err.isOperational,
+  };
+
+  try {
+      res.status(err.statusCode || 500).json(responseBody);
+  } catch (sendError) {
+      console.error("[sendErrorDev] ERRO AO ENVIAR RESPOSTA JSON:", sendError);
+      res.status(500).send('Erro interno do servidor ao formatar a resposta de erro.');
+  }
 };
 
+// Envia erro simplificado em produção
 const sendErrorProd = (err, res) => {
   if (err.isOperational) {
     res.status(err.statusCode).json({
@@ -58,6 +73,7 @@ const sendErrorProd = (err, res) => {
       message: err.message,
     });
   } else {
+    console.error("ERROR 💥 (Não Operacional):", err);
     res.status(500).json({
       status: "error",
       message: "Desculpe, algo deu muito errado no servidor!",
@@ -67,35 +83,38 @@ const sendErrorProd = (err, res) => {
 
 // --- Middleware Principal ---
 const globalErrorHandler = (err, req, res, next) => {
+
   err.statusCode = err.statusCode || 500;
   err.status = err.status || "error";
+  let errorToProcess = err;
 
-  let error = {
-    ...err,
-    name: err.name,
-    message: err.message,
-    code: err.code,
-    path: err.path,
-    value: err.value,
-    keyValue: err.keyValue,
-    errors: err.errors,
-  };
+  // --- Tratamento Específico de Erros do DB/JWT ---
+  if (errorToProcess.name === "CastError")
+    errorToProcess = handleCastErrorDB(errorToProcess);
+  if (errorToProcess.code === 11000)
+    errorToProcess = handleDuplicateFieldsDB(errorToProcess);
+  if (errorToProcess instanceof mongoose.Error.ValidationError)
+    errorToProcess = handleValidationErrorDB(errorToProcess);
+  if (errorToProcess.name === "JsonWebTokenError")
+    errorToProcess = handleJWTError();
+  if (errorToProcess.name === "TokenExpiredError")
+    errorToProcess = handleJWTExpiredError();
 
-  const isProduction = process.env.NODE_ENV === "production";
-
-  if (isProduction) {
-    if (error.name === "CastError") error = handleCastErrorDB(error);
-    if (error.code === 11000) error = handleDuplicateFieldsDB(error);
-    if (error.name === "ValidationError")
-      error = handleValidationErrorDB(error);
-    if (error.name === "JsonWebTokenError") error = handleJWTError();
-    if (error.name === "TokenExpiredError") error = handleJWTExpiredError();
+  // --- Garante que mesmo erros não tratados tenham uma mensagem ---
+  if (!errorToProcess.message) {
+    console.warn("[globalErrorHandler] Erro sem mensagem, definindo mensagem padrão.");
+    errorToProcess.message = "Ocorreu um erro inesperado.";
   }
 
-  if (isProduction) {
-    sendErrorProd(error, res);
+  // --- Envia a Resposta Baseado no Ambiente ---
+  if (process.env.NODE_ENV === "production") {
+    if (!errorToProcess.isOperational) {
+      sendErrorProd(err, res);
+    } else {
+      sendErrorProd(errorToProcess, res);
+    }
   } else {
-    sendErrorDev(error.isOperational ? error : err, res);
+    sendErrorDev(errorToProcess, res);
   }
 };
 

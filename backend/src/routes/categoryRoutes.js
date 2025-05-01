@@ -1,25 +1,27 @@
 // src/routes/category.js
-import express from 'express';
-import { body, param } from 'express-validator';
-import { authenticate, isAdmin } from '../middleware/auth.js';
+import express from "express";
+import { body, param } from "express-validator";
+import { authenticate, isAdmin } from "../middleware/auth.js"; // Importa middlewares
 import {
-    createCategory,
-    getCategories,
-    getCategoryById,
-    updateCategory,
-    deleteCategory
-} from '../controllers/category.js';
+  createCategory,
+  getCategories,
+  getCategoryById,
+  updateCategory,
+  deleteCategory,
+} from "../controllers/categoryController.js"; 
 
 const router = express.Router();
 
-// --- Validações ---
+// --- Validações Reutilizáveis ---
+
+// Regra para validar o nome (obrigatório e não vazio) e descrição (opcional)
 const categoryValidationRules = [
-    body('name', 'Nome da categoria é obrigatório').trim().notEmpty(),
-    body('description', 'Descrição inválida').optional().trim()
+  body("name", "Nome da categoria é obrigatório").trim().notEmpty(),
+  body("description", "Descrição inválida (opcional)").optional().trim(), // Apenas valida se existe
 ];
-const idValidationRule = [
-    param('id', 'ID de categoria inválido').isMongoId()
-];
+
+// Regra para validar se o parâmetro :id é um MongoID válido
+const idValidationRule = [param("id", "ID de categoria inválido").isMongoId()];
 
 // --- Rotas ---
 
@@ -30,6 +32,9 @@ const idValidationRule = [
  *   description: Gerenciamento de categorias de produtos.
  */
 
+// Rota para CRIAR categoria (POST /api/categories)
+// Requer autenticação (authenticate) e que o usuário seja admin (isAdmin)
+// Aplica as regras de validação do corpo (categoryValidationRules)
 /**
  * @swagger
  * /api/categories:
@@ -37,7 +42,7 @@ const idValidationRule = [
  *     summary: Cria uma nova categoria (Admin).
  *     tags: [Categories]
  *     security:
- *       - bearerAuth: [] # Requer Admin
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -64,15 +69,23 @@ const idValidationRule = [
  *         description: Erro interno.
  *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' }}}
  */
-router.post('/', authenticate, isAdmin, categoryValidationRules, createCategory);
+router.post(
+  "/",
+  authenticate,
+  isAdmin,
+  categoryValidationRules,
+  createCategory
+);
 
+// Rota para LISTAR todas as categorias (GET /api/categories)
+// Rota pública, não requer autenticação
 /**
  * @swagger
  * /api/categories:
  *   get:
  *     summary: Lista todas as categorias.
  *     tags: [Categories]
- *     security: [] # MARCAÇÃO CORRIGIDA: Endpoint público
+ *     security: []
  *     responses:
  *       '200':
  *         description: Lista de categorias.
@@ -86,17 +99,19 @@ router.post('/', authenticate, isAdmin, categoryValidationRules, createCategory)
  *         description: Erro interno.
  *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' }}}
  */
-router.get('/', getCategories);
+router.get("/", getCategories);
 
+// Rota para OBTER uma categoria por ID (GET /api/categories/:id)
+// Rota pública, mas valida o formato do ID
 /**
  * @swagger
  * /api/categories/{id}:
  *   get:
  *     summary: Obtém uma categoria específica por ID.
  *     tags: [Categories]
- *     security: [] # MARCAÇÃO CORRIGIDA: Endpoint público
+ *     security: []
  *     parameters:
- *       - $ref: '#/components/parameters/CategoryIdParam' # USA PARÂMETRO CENTRALIZADO
+ *       - $ref: '#/components/parameters/CategoryIdParam'
  *     responses:
  *       '200':
  *         description: Detalhes da categoria.
@@ -111,8 +126,11 @@ router.get('/', getCategories);
  *         description: Erro interno.
  *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' }}}
  */
-router.get('/:id', idValidationRule, getCategoryById);
+router.get("/:id", idValidationRule, getCategoryById);
 
+// Rota para ATUALIZAR categoria (PUT /api/categories/:id)
+// Requer autenticação e admin
+// Valida o ID e os dados do corpo
 /**
  * @swagger
  * /api/categories/{id}:
@@ -120,7 +138,7 @@ router.get('/:id', idValidationRule, getCategoryById);
  *     summary: Atualiza uma categoria existente (Admin).
  *     tags: [Categories]
  *     security:
- *       - bearerAuth: [] # Requer Admin
+ *       - bearerAuth: []
  *     parameters:
  *       - $ref: '#/components/parameters/CategoryIdParam'
  *     requestBody:
@@ -135,7 +153,7 @@ router.get('/:id', idValidationRule, getCategoryById);
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/CategoryOutput' # Retorna a categoria atualizada
+ *               $ref: '#/components/schemas/CategoryOutput'
  *       '400':
  *         description: Erro de validação (ID inválido ou dados do corpo inválidos).
  *         content:
@@ -173,9 +191,18 @@ router.get('/:id', idValidationRule, getCategoryById);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-// Nota: idValidationRule e categoryValidationRules são aplicados aqui.
-router.put('/:id', authenticate, isAdmin, idValidationRule, categoryValidationRules, updateCategory);
+router.put(
+  "/:id",
+  authenticate,
+  isAdmin,
+  idValidationRule,
+  categoryValidationRules,
+  updateCategory
+);
 
+// Rota para DELETAR categoria (DELETE /api/categories/:id)
+// Requer autenticação e admin
+// Valida o ID
 /**
  * @swagger
  * /api/categories/{id}:
@@ -183,23 +210,24 @@ router.put('/:id', authenticate, isAdmin, idValidationRule, categoryValidationRu
  *     summary: Deleta uma categoria (Admin).
  *     tags: [Categories]
  *     security:
- *       - bearerAuth: [] # Requer Admin
+ *       - bearerAuth: []
  *     parameters:
  *       - $ref: '#/components/parameters/CategoryIdParam'
  *     responses:
  *       '200':
- *         description: Categoria deletada.
+ *         description: Categoria deletada (se vazia). Retorna mensagem de sucesso.
+ *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/SuccessResponse' # Usa resposta de sucesso genérica
+ *               $ref: '#/components/schemas/SuccessResponse'
  *       '204':
- *          description: Categoria deletada com sucesso (alternativa sem corpo de resposta).
+ *          description: Categoria deletada com sucesso (alternativa sem corpo de resposta, se controller for ajustado).
  *       '400':
  *         description: Erro de validação (ID inválido ou não pode deletar pois existem produtos associados).
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/ErrorResponse' # Ou ErrorValidationResponse se for do ID
+ *               $ref: '#/components/schemas/ErrorResponse' # Mensagem específica do controller
  *       '401':
  *         description: Não autorizado.
  *         content:
@@ -225,6 +253,6 @@ router.put('/:id', authenticate, isAdmin, idValidationRule, categoryValidationRu
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.delete('/:id', authenticate, isAdmin, idValidationRule, deleteCategory);
+router.delete("/:id", authenticate, isAdmin, idValidationRule, deleteCategory);
 
 export default router;

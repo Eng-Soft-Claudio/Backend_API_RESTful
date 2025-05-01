@@ -28,7 +28,6 @@ const createAddressValidationRules = [
     body('postalCode', 'CEP inválido (formato 12345-678 ou 12345678)').trim().notEmpty().matches(/^\d{5}-?\d{3}$/),
     body('country', 'País é obrigatório (máx 50 caracteres)').optional({ checkFalsy: true }).trim().notEmpty().isLength({ max: 50 }),
     body('phone', 'Telefone inválido (máx 20 caracteres)').optional().trim().isLength({ max: 20 }),
-    body('isDefault', 'Valor inválido para isDefault (deve ser true ou false)').optional().isBoolean().toBoolean()
 ];
 
 // --- Regras de Validação para ATUALIZAÇÃO (PUT) ---

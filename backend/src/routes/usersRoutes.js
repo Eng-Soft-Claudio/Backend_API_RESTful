@@ -1,92 +1,126 @@
 //src/routes/users.js
-import express from 'express';
-import { body, param} from 'express-validator';
-import User from '../models/User.js'; 
-import { authenticate, isAdmin } from '../middleware/auth.js';
+import express from "express";
+import { body, param } from "express-validator";
+import User from "../models/User.js";
+import { authenticate, isAdmin } from "../middleware/auth.js";
 import {
-    createUser,
-    getUsers,
-    getUserById,
-    updateUser,
-    deleteUser,
-    getMe,
-    updateMe,
-    deleteMe,
-    updateMyPassword
-} from '../controllers/users.js';
+  createUser,
+  getUsers,
+  getUserById,
+  updateUser,
+  deleteUser,
+  getMe,
+  updateMe,
+  deleteMe,
+  updateMyPassword,
+} from "../controllers/usersController.js";
 
 // --- VALIDAÇÕES ---
 
 const adminCreateUserValidationRules = [
-  body('name', 'Nome é obrigatório').trim().notEmpty(),
-  body('email', 'Email inválido')
-      .isEmail()
-      .normalizeEmail()
-      .custom(async (value) => { 
-          const user = await User.findOne({ email: value });
-          if (user) {
-              return Promise.reject('Este E-mail já está registrado.');
-          }
-      }),
-  body('password', 'Senha deve ter no mínimo 8 caracteres')
-      .isLength({ min: 8 })
-      .trim(),
-  body('role', "Role inválida. Deve ser 'user' ou 'admin'.")
-      .optional()
-      .isIn(['user', 'admin'])
+  body("name", "Nome é obrigatório").trim().notEmpty(),
+  body("email", "Email inválido ou já registrado")
+    .isEmail()
+    .normalizeEmail()
+    .custom(async (value) => {
+      const user = await User.findOne({ email: value });
+      if (user) {
+        return Promise.reject("Este E-mail já está registrado.");
+      }
+    }),
+  body("password", "Senha deve ter no mínimo 8 caracteres")
+    .isLength({ min: 8 })
+    .trim(),
+  body("cpf", "CPF inválido ou já registrado")
+    .trim()
+    .notEmpty()
+    .withMessage("CPF é obrigatório.")
+    .custom(async (value) => {
+      if (!value) return;
+      const user = await User.findOne({ cpf: value });
+      if (user) {
+        return Promise.reject("Este CPF já está registrado.");
+      }
+    }),
+  body(
+    "birthDate",
+    "Data de nascimento é obrigatória e deve estar no formato AAAA-MM-DD"
+  )
+    .notEmpty()
+    .withMessage("Data de nascimento é obrigatória.")
+    .isISO8601()
+    .withMessage("Formato de data inválido (use AAAA-MM-DD).")
+    .toDate(),
+  body("role", "Role inválida. Deve ser 'user' ou 'admin'.")
+    .optional()
+    .isIn(["user", "admin"]),
 ];
 
-const mongoIdValidation = (paramName = 'id') => [
-    param(paramName, `ID inválido para ${paramName}`).isMongoId()
+const mongoIdValidation = (paramName = "id") => [
+  param(
+    paramName,
+    `ID inválido para ${paramName}. Deve ser um MongoID válido.`
+  ).isMongoId(),
 ];
 
 const adminUpdateUserValidationRules = [
-    body('name', 'Nome não pode ser vazio').optional().trim().notEmpty(),
-    body('email', 'Email inválido')
-        .optional()
-        .isEmail()
-        .normalizeEmail()
-        .custom(async (value, { req }) => { 
-            if (!value) return; 
-            const user = await User.findOne({ email: value });
-            if (user && user._id.toString() !== req.params.id) {
-                return Promise.reject('Este E-mail já está registrado por outro usuário.');
-            }
-        }),
-    body('role', "Role inválida. Deve ser 'user' ou 'admin'.")
-        .optional()
-        .isIn(['user', 'admin'])
+  body("name", "Nome não pode ser vazio se fornecido")
+    .optional()
+    .trim()
+    .notEmpty(),
+  body("email", "Email inválido ou já registrado por outro usuário")
+    .optional()
+    .isEmail()
+    .withMessage("Formato de email inválido.")
+    .normalizeEmail()
+    .custom(async (value, { req }) => {
+      if (!value) return;
+      const user = await User.findOne({ email: value });
+      if (user && user._id.toString() !== req.params.id) {
+        return Promise.reject(
+          "Este E-mail já está registrado por outro usuário."
+        );
+      }
+    }),
+  body("role", "Role inválida. Deve ser 'user' ou 'admin'.")
+    .optional()
+    .isIn(["user", "admin"]),
 ];
 
 const updateMeValidationRules = [
-    body('name', 'Nome não pode ser vazio').optional().trim().notEmpty(),
-    body('email', 'Email inválido')
-        .optional()
-        .isEmail()
-        .normalizeEmail()
-        .custom(async (value, { req }) => { 
-             if (!value) return; 
-             const user = await User.findOne({ email: value });
-             
-             if (user && user._id.toString() !== req.user.id) {
-                 return Promise.reject('Este E-mail já está registrado por outro usuário.');
-             }
-        })
+  body("name", "Nome não pode ser vazio se fornecido")
+    .optional()
+    .trim()
+    .notEmpty(),
+  body("email", "Email inválido ou já registrado por outro usuário")
+    .optional()
+    .isEmail()
+    .withMessage("Formato de email inválido.")
+    .normalizeEmail()
+    .custom(async (value, { req }) => {
+      if (!value) return;
+      const user = await User.findOne({ email: value });
+      if (user && user._id.toString() !== req.user.id) {
+        return Promise.reject(
+          "Este E-mail já está registrado por outro usuário."
+        );
+      }
+    }),
 ];
 
 const updatePasswordValidationRules = [
-    body('currentPassword', 'Senha atual é obrigatória').notEmpty(),
-    body('password', 'Nova senha deve ter no mínimo 8 caracteres')
-        .isLength({ min: 8 })
-        .trim(),
-    body('passwordConfirm', 'Confirmação de senha é obrigatória e deve coincidir')
-        .notEmpty()
-        .custom((value, { req }) => {
-            if (value !== req.body.password) {
-                throw new Error('A nova senha e a confirmação não coincidem.');
-            }
-            return true;
-        })
+  body("currentPassword", "Senha atual é obrigatória").notEmpty(),
+  body("password", "Nova senha deve ter no mínimo 8 caracteres")
+    .isLength({ min: 8 })
+    .trim(),
+  body("passwordConfirm", "Confirmação de senha é obrigatória")
+    .notEmpty()
+    .custom((value, { req }) => {
+      if (value !== req.body.password) {
+        throw new Error("A nova senha e a confirmação não coincidem.");
+      }
+      return true;
+    }),
 ];
 
 // --- ROTAS ---
@@ -139,7 +173,7 @@ const router = express.Router();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.get('/me', authenticate, getMe);
+router.get("/me", authenticate, getMe);
 
 /**
  * @swagger
@@ -191,7 +225,7 @@ router.get('/me', authenticate, getMe);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.patch('/me', authenticate, updateMeValidationRules, updateMe); 
+router.patch("/me", authenticate, updateMeValidationRules, updateMe);
 
 /**
  * @swagger
@@ -245,7 +279,12 @@ router.patch('/me', authenticate, updateMeValidationRules, updateMe);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.patch('/updateMyPassword', authenticate, updatePasswordValidationRules, updateMyPassword);
+router.patch(
+  "/updateMyPassword",
+  authenticate,
+  updatePasswordValidationRules,
+  updateMyPassword
+);
 
 /**
  * @swagger
@@ -278,7 +317,7 @@ router.patch('/updateMyPassword', authenticate, updatePasswordValidationRules, u
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.delete('/me', authenticate, deleteMe);
+router.delete("/me", authenticate, deleteMe);
 
 // --- Rotas de Admin ---
 
@@ -351,7 +390,13 @@ router.delete('/me', authenticate, deleteMe);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/', authenticate, isAdmin, adminCreateUserValidationRules, createUser);
+router.post(
+  "/",
+  authenticate,
+  isAdmin,
+  adminCreateUserValidationRules,
+  createUser
+);
 
 /**
  * @swagger
@@ -402,7 +447,7 @@ router.post('/', authenticate, isAdmin, adminCreateUserValidationRules, createUs
  *              schema:
  *                $ref: '#/components/schemas/ErrorResponse'
  */
-router.get('/', authenticate, isAdmin, getUsers);
+router.get("/", authenticate, isAdmin, getUsers);
 
 /**
  * @swagger
@@ -444,7 +489,7 @@ router.get('/', authenticate, isAdmin, getUsers);
  *         description: Erro interno.
  *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
  */
-router.get('/:id', authenticate, isAdmin, mongoIdValidation('id'), getUserById); 
+router.get("/:id", authenticate, isAdmin, mongoIdValidation("id"), getUserById);
 
 /**
  * @swagger
@@ -491,7 +536,14 @@ router.get('/:id', authenticate, isAdmin, mongoIdValidation('id'), getUserById);
  *       '404': { description: Usuário não encontrado, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
  *       '500': { description: Erro interno, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
  */
-router.patch('/:id', authenticate, isAdmin, mongoIdValidation('id'), adminUpdateUserValidationRules, updateUser); 
+router.patch(
+  "/:id",
+  authenticate,
+  isAdmin,
+  mongoIdValidation("id"),
+  adminUpdateUserValidationRules,
+  updateUser
+);
 
 /**
  * @swagger
@@ -513,7 +565,13 @@ router.patch('/:id', authenticate, isAdmin, mongoIdValidation('id'), adminUpdate
  *       '404': { description: Usuário não encontrado, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
  *       '500': { description: Erro interno, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
  */
-router.delete('/:id', authenticate, isAdmin, mongoIdValidation('id'), deleteUser); 
+router.delete(
+  "/:id",
+  authenticate,
+  isAdmin,
+  mongoIdValidation("id"),
+  deleteUser
+);
 
 // --- Definição de Parâmetro Reutilizável ---
 

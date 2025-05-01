@@ -4,6 +4,7 @@ import AppError from "../utils/appError.js";
 import User from "../models/User.js";
 
 export const authenticate = async (req, res, next) => {
+  
   try {
     let token;
     if (
@@ -22,6 +23,7 @@ export const authenticate = async (req, res, next) => {
     }
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const currentUser = await User.findById(decoded.id);
+    
     if (!currentUser) {
       return next(
         new AppError("O usuário dono deste token não existe mais.", 401)
@@ -48,7 +50,7 @@ export const authenticate = async (req, res, next) => {
           "Sua sessão expirou. Por favor, faça login novamente.",
           401
         )
-      ); 
+      );
     }
     next(err);
   }

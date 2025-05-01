@@ -1,14 +1,14 @@
 //src/app.js
 import express from 'express';
 import dotenv from 'dotenv';
-import authRoutes from './routes/auth.js';
-import userRoutes from './routes/users.js';
-import productRoutes from './routes/products.js';
-import categoryRoutes from './routes/category.js';
+import authRoutes from './routes/authRoutes.js';
+import userRoutes from './routes/usersRoutes.js';
+import productRoutes from './routes/productsRoutes.js';
+import categoryRoutes from './routes/categoryRoutes.js';
 import addressRoutes from './routes/addressRoutes.js';
 import cartRoutes from './routes/cartRoutes.js';
 import orderRoutes from './routes/orderRoutes.js';
-import router from './routes/webhooks.js';
+import router from './routes/webhooksRoutes.js';
 import swaggerUI from 'swagger-ui-express';
 import swaggerJSDoc from 'swagger-jsdoc';
 import { apiLimiter, corsOptions } from './config/security.js';
