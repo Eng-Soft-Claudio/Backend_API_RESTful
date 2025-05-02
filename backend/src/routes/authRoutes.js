@@ -1,7 +1,11 @@
 //src/routes/auth.js
 import express from "express";
 import { body } from "express-validator";
-import { login, register, getCurrentUser } from "../controllers/authController.js";
+import {
+  login,
+  register,
+  getCurrentUser,
+} from "../controllers/authController.js";
 import { authenticate } from "../middleware/auth.js";
 import User from "../models/User.js";
 import { cpf } from "cpf-cnpj-validator";

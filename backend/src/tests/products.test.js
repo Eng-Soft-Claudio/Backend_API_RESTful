@@ -60,7 +60,6 @@ beforeAll(async () => {
     }
     fs.writeFileSync(dummyImagePath, 'test content');
   } catch (err) {
-    console.error("Falha ao criar diretório/arquivo dummy:", err);
     throw err;
   }
 
@@ -70,7 +69,7 @@ beforeAll(async () => {
 
   if (!process.env.JWT_SECRET) {
     process.env.JWT_SECRET = 'este-e-um-segredo-super-secreto-apenas-para-testes-12345!@';
-    console.warn('JWT_SECRET não definido, usando valor padrão para testes de product.');
+    logger.warn('JWT_SECRET não definido, usando valor padrão para testes de product.');
   }
 
   await Promise.all([
@@ -99,7 +98,7 @@ beforeAll(async () => {
     await Product.collection.createIndex({ name: 'text', description: 'text' });
   } catch (indexErr) {
     if (indexErr.codeName !== 'IndexAlreadyExists') {
-      console.warn("Aviso ao criar índice de texto:", indexErr.message);
+      logger.warn("Aviso ao criar índice de texto:", indexErr.message);
     }
   }
 });
@@ -128,7 +127,7 @@ afterAll(async () => {
         fs.rmSync(uploadsDir, { recursive: true, force: true });
     }
   } catch (cleanupErr) {
-    console.error('Erro ao limpar diretório/arquivo dummy:', cleanupErr);
+    logger.error('Erro ao limpar diretório/arquivo dummy:', cleanupErr);
      try { fs.rmSync(uploadsDir, { recursive: true, force: true }); } catch (e) {}
   }
 });
@@ -641,4 +640,4 @@ describe('/api/products', () => {
          });
     });
 
-}); // Fim describe /api/products
+}); 

@@ -15,9 +15,6 @@ beforeAll(async () => {
   await mongoose.connect(mongoUri);
   if (!process.env.JWT_SECRET) {
     process.env.JWT_SECRET = "test-secret-for-auth-please-replace";
-    console.warn(
-      "JWT_SECRET não definido, usando valor padrão para testes de auth."
-    );
   }
   await User.deleteMany({});
 });
@@ -33,7 +30,7 @@ afterAll(async () => {
 
 // --- Bloco de Testes para Autenticação ---
 describe("/api/auth", () => {
-  // --- Testes de Registro ---
+  // --- Testes POST /register ---
   describe("POST /register", () => {
     const validUserData = {
       name: "Test User Register",
@@ -77,8 +74,8 @@ describe("/api/auth", () => {
         true
       );
       expect(dbUser.cpf).toBe(validUserData.cpf.replace(/\D/g, ""));
-      expect(dbUser.birthDate).toEqual(
-        new Date(validUserData.birthDate + "T00:00:00.000Z")
+      expect(dbUser.birthDate.toISOString().split("T")[0]).toBe(
+        validUserData.birthDate
       );
     });
 
@@ -103,7 +100,7 @@ describe("/api/auth", () => {
         .expect("Content-Type", /json/)
         .expect(400);
 
-        expect(res.body.status).toBe('fail');
+      expect(res.body.status).toBe("fail");
       const emailError = res.body.errors.find((err) => err.path === "email");
       expect(emailError).toBeDefined();
       expect(emailError.msg).toContain("Este E-mail já está registrado");
@@ -114,7 +111,7 @@ describe("/api/auth", () => {
         name: "Existing User CPF",
         email: "other@email.com",
         password: "password123",
-        cpf:existingUserCPF,
+        cpf: existingUserCPF,
         birthDate: "1985-03-20",
       });
 
@@ -130,8 +127,8 @@ describe("/api/auth", () => {
         .expect("Content-Type", /json/)
         .expect(400);
 
-        expect(res.body.status).toBe('fail');
-        const cpfError = res.body.errors.find(err => err.path === 'cpf');
+      expect(res.body.status).toBe("fail");
+      const cpfError = res.body.errors.find((err) => err.path === "cpf");
       expect(cpfError).toBeDefined();
       expect(cpfError.msg).toContain("Este CPF já está registrado");
     });
@@ -192,11 +189,14 @@ describe("/api/auth", () => {
       expect(res.body.status).toBe("fail");
       const cpfError = res.body.errors.find((err) => err.path === "cpf");
       expect(cpfError).toBeDefined();
-      expect(cpfError.msg).toContain('CPF inválido (formato ou dígito verificador)');
+      expect(cpfError.msg).toContain(
+        "CPF inválido (formato ou dígito verificador)"
+      );
     });
 
     it("deve retornar erro 400 se a Data de Nascimento estiver faltando", async () => {
       const { birthDate, ...dataWithoutBirthDate } = validUserData;
+      dataWithoutBirthDate.cpf = otherValidCPF;
       const res = await request(app)
         .post("/api/auth/register")
         .send(dataWithoutBirthDate)
@@ -223,6 +223,7 @@ describe("/api/auth", () => {
         (err) => err.path === "birthDate"
       );
       expect(birthDateError).toBeDefined();
+      expect(birthDateError.msg).toMatch(/Formato de data inválido/i);
     });
 
     it("deve retornar erro 400 se a Data de Nascimento indicar idade < 16", async () => {
@@ -260,7 +261,7 @@ describe("/api/auth", () => {
     });
   });
 
-  // --- Testes de Login ---
+  // --- Testes de POST /login ---
   describe("POST /login", () => {
     const userCredentials = {
       email: "login@test.com",
@@ -276,6 +277,7 @@ describe("/api/auth", () => {
 
     // Cria um usuário VÁLIDO antes de cada teste de login
     beforeEach(async () => {
+      await User.deleteMany({});
       await User.create(loginUserData);
     });
 
@@ -294,6 +296,28 @@ describe("/api/auth", () => {
       const dbUser = await User.findOne({ email: userCredentials.email });
       expect(decoded.id).toBe(dbUser._id.toString());
       expect(decoded.role).toBe(dbUser.role);
+    });
+
+    it("deve permitir acesso a rota protegida logo após o login", async () => {
+      // 1. Faz login para obter token
+      const loginRes = await request(app)
+        .post("/api/auth/login")
+        .send(userCredentials)
+        .expect(200);
+      const token = loginRes.body.token;
+      expect(token).toBeDefined();
+
+      // 2. Tenta acessar rota protegida com o token recém-obtido
+      const meRes = await request(app)
+        .get("/api/auth/me")
+        .set("Authorization", `Bearer ${token}`)
+        .expect("Content-Type", /json/)
+        .expect(200);
+
+      // 3. Verifica se retornou os dados do usuário corretamente
+      expect(meRes.body).toHaveProperty("status", "success");
+      expect(meRes.body.data.user).toBeDefined();
+      expect(meRes.body.data.user.email).toBe(userCredentials.email);
     });
 
     it("deve retornar erro 401 com senha incorreta", async () => {
@@ -359,17 +383,112 @@ describe("/api/auth", () => {
       expect(passwordError).toBeDefined();
     });
 
-    it('deve permitir acesso a rota protegida logo após o login (antes da mudança de senha)', async () => {
+    it("deve permitir acesso a rota protegida logo após o login (antes da mudança de senha)", async () => {
+      // 1. Faz login para obter token do usuário criado no beforeEach deste describe
       const loginRes = await request(app)
-          .post('/api/auth/login')
-          .send(userCredentials)
-          .expect(200);
+        .post("/api/auth/login")
+        .send(userCredentials)
+        .expect(200);
       const token = loginRes.body.token;
-  
-      await request(app)
-          .get('/api/auth/me')
-          .set('Authorization', `Bearer ${token}`)
-          .expect(200); 
+      expect(token).toBeDefined();
+      // 2. Tenta acessar rota protegida /api/auth/me com o token recém-obtido
+      const meRes = await request(app)
+        .get("/api/auth/me")
+        .set("Authorization", `Bearer ${token}`)
+        .expect("Content-Type", /json/)
+        .expect(200);
+      // 3. Verifica se retornou os dados do usuário corretamente
+      expect(meRes.body.status).toBe("success");
+      expect(meRes.body.data.user).toBeDefined();
+      expect(meRes.body.data.user.email).toBe(userCredentials.email);
+    });
   });
+
+  // --- Testes GET /me ---
+  describe("GET /me", () => {
+    let authToken;
+    let currentUserId;
+    const meUserData = {
+      name: "Me User",
+      email: "me@test.com",
+      password: "password123",
+      cpf: "16981152029",
+      birthDate: "1991-01-01",
+    };
+
+    beforeEach(async () => {
+      // Cria um usuário específico para este bloco de testes /me
+      await User.deleteMany({});
+      const meUser = await User.create(meUserData);
+      currentUserId = meUser._id;
+      authToken = jwt.sign(
+        { id: currentUserId, role: meUser.role, name: meUser.name },
+        process.env.JWT_SECRET,
+        { expiresIn: "1h" }
+      );
+    });
+
+    it("deve retornar os dados do usuário logado corretamente", async () => {
+      const res = await request(app)
+        .get("/api/auth/me")
+        .set("Authorization", `Bearer ${authToken}`)
+        .expect("Content-Type", /json/)
+        .expect(200);
+
+      expect(res.body.status).toBe("success");
+      expect(res.body.data.user).toBeDefined();
+      expect(res.body.data.user._id.toString()).toBe(currentUserId.toString());
+      expect(res.body.data.user.email).toBe("me@test.com");
+      expect(res.body.data.user.name).toBe("Me User");
+      expect(res.body.data.user.password).toBeUndefined();
+      expect(res.body.data.user.cpf).toBeUndefined();
+      expect(res.body.data.user.birthDate).toBeUndefined();
+    });
+
+    it("deve retornar 401 se nenhum token for fornecido", async () => {
+      await request(app).get("/api/auth/me").expect(401);
+    });
+
+    it("deve retornar 401 se o token for inválido (malformado)", async () => {
+      const res = await request(app)
+        .get("/api/auth/me")
+        .set("Authorization", "Bearer invalidtoken123")
+        .expect(401);
+      expect(res.body.message).toMatch(/Token inválido/i);
+    });
+
+    it("deve retornar 401 se o token tiver assinatura inválida", async () => {
+      const invalidToken = authToken.slice(0, -1) + "X";
+      const res = await request(app)
+        .get("/api/auth/me")
+        .set("Authorization", `Bearer ${invalidToken}`)
+        .expect(401);
+      expect(res.body.message).toMatch(/Token inválido/i);
+    });
+
+    it("deve retornar 401 se o token estiver expirado", async () => {
+      const expiredToken = jwt.sign(
+        { id: currentUserId },
+        process.env.JWT_SECRET,
+        { expiresIn: "-1s" }
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const res = await request(app)
+        .get("/api/auth/me")
+        .set("Authorization", `Bearer ${expiredToken}`)
+        .expect(401);
+      expect(res.body.message).toMatch(/Sua sessão expirou/i);
+    });
+
+    it("deve retornar 401 se o usuário do token não existir mais", async () => {
+      await User.findByIdAndDelete(currentUserId);
+      const res = await request(app)
+        .get("/api/auth/me")
+        .set("Authorization", `Bearer ${authToken}`)
+        .expect(401);
+      expect(res.body.message).toMatch(
+        /O usuário dono deste token não existe mais/i
+      );
+    });
   });
 });

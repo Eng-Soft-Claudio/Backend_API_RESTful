@@ -41,7 +41,7 @@ beforeAll(async () => {
     // Garantir JWT_SECRET
     if (!process.env.JWT_SECRET) {
         process.env.JWT_SECRET = 'test-secret-for-review-please-replace';
-        console.warn('JWT_SECRET não definido, usando valor padrão para testes de review.');
+        logger.warn('JWT_SECRET não definido, usando valor padrão para testes de review.');
     }
 
     // Limpeza inicial

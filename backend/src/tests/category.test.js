@@ -18,7 +18,7 @@ const adminUserData = {
   name: "Category Admin",
   email: "cat.admin@test.com",
   password: "password123",
-  cpf: "11122233344", // CPF Válido e único
+  cpf: "90450332080",
   birthDate: "1980-01-01",
   role: "admin",
 };
@@ -26,7 +26,7 @@ const normalUserData = {
   name: "Category User",
   email: "cat.user@test.com",
   password: "password123",
-  cpf: "55566677788", // CPF Válido e único
+  cpf: "59111802006",
   birthDate: "1995-05-05",
   role: "user",
 };
@@ -36,10 +36,9 @@ beforeAll(async () => {
   const mongoUri = mongoServer.getUri();
   await mongoose.connect(mongoUri);
 
-  // Garantir JWT_SECRET
   if (!process.env.JWT_SECRET) {
     process.env.JWT_SECRET = "test-secret-for-category-please-replace";
-    console.warn(
+    logger.warn(
       "JWT_SECRET não definido, usando valor padrão para testes de category."
     );
   }
@@ -48,7 +47,6 @@ beforeAll(async () => {
   await Category.deleteMany({});
   await Product.deleteMany({});
 
-  // Criar usuários com CPF e BirthDate
   const adminUser = await User.create(adminUserData);
   const normalUser = await User.create(normalUserData);
   adminUserId = adminUser._id;
@@ -67,7 +65,6 @@ beforeAll(async () => {
 });
 
 afterEach(async () => {
-  // Limpa categorias e produtos após cada teste
   await Category.deleteMany({});
   await Product.deleteMany({});
 });
@@ -109,16 +106,14 @@ describe("/api/categories", () => {
     });
 
     it("Deve retornar 409 se tentar criar categoria com nome duplicado", async () => {
-      await Category.create(categoryData); // Cria a primeira
+      await Category.create(categoryData);
 
       const res = await request(app)
         .post("/api/categories")
         .set("Authorization", `Bearer ${adminToken}`)
-        .send({ name: "eletrônicos novos" }) // Mesmo nome, case diferente
+        .send({ name: "eletrônicos novos" })
         .expect("Content-Type", /json/)
-        .expect(409); // Espera Conflito
-
-      // Verifica a mensagem vinda do controller/errorHandler
+        .expect(409);
       expect(res.body.message).toMatch(/Categoria com nome.*já existe/i);
     });
 
@@ -127,10 +122,8 @@ describe("/api/categories", () => {
         .post("/api/categories")
         .set("Authorization", `Bearer ${adminToken}`)
         .send({ description: "Sem nome" })
-        .expect("Content-Type", /json/) // Assumindo que validação retorna JSON
+        .expect("Content-Type", /json/)
         .expect(400);
-
-      // Verifica erro de validação da rota
       expect(res.body.errors).toBeInstanceOf(Array);
       const nameError = res.body.errors.find((err) => err.path === "name");
       expect(nameError).toBeDefined();
@@ -208,7 +201,6 @@ describe("/api/categories", () => {
         .get("/api/categories/invalid-id")
         .expect("Content-Type", /json/)
         .expect(400);
-      // Validação da rota
       expect(res.body.errors).toBeInstanceOf(Array);
       expect(res.body.errors[0].msg).toMatch(/ID de categoria inválido/i);
     });
@@ -238,7 +230,7 @@ describe("/api/categories", () => {
 
       expect(res.body.name).toBe(updateData.name);
       expect(res.body.description).toBe(updateData.description);
-      expect(res.body.slug).toBe("categoria-editada-put"); // Slug atualizado
+      expect(res.body.slug).toBe("categoria-editada-put");
 
       // Verifica DB
       const dbCat = await Category.findById(testCat._id);
@@ -272,7 +264,6 @@ describe("/api/categories", () => {
         .send(updateData)
         .expect("Content-Type", /json/)
         .expect(400);
-      // Validação da rota
       expect(res.body.errors).toBeInstanceOf(Array);
       expect(res.body.errors[0].msg).toMatch(/ID de categoria inválido/i);
     });
@@ -281,22 +272,21 @@ describe("/api/categories", () => {
       const res = await request(app)
         .put(`/api/categories/${testCat._id}`)
         .set("Authorization", `Bearer ${adminToken}`)
-        .send({ name: "" }) // Nome vazio
+        .send({ name: "" })
         .expect("Content-Type", /json/)
         .expect(400);
-      // Validação da rota
       expect(res.body.errors).toBeInstanceOf(Array);
       expect(res.body.errors[0].msg).toMatch(/obrigatório/i);
     });
 
     it("Deve retornar 409 se tentar atualizar para nome duplicado", async () => {
-      await Category.create({ name: "Nome Existente PUT" }); // Cria categoria com nome de destino
+      await Category.create({ name: "Nome Existente PUT" });
       const res = await request(app)
-        .put(`/api/categories/${testCat._id}`) // Tenta atualizar 'testCat'
+        .put(`/api/categories/${testCat._id}`)
         .set("Authorization", `Bearer ${adminToken}`)
-        .send({ name: "Nome Existente PUT" }) // Para o nome que já existe
+        .send({ name: "Nome Existente PUT" })
         .expect("Content-Type", /json/)
-        .expect(409); // Espera conflito
+        .expect(409);
 
       expect(res.body.message).toMatch(
         /Já existe uma categoria com nome\/slug similar/i
@@ -316,17 +306,16 @@ describe("/api/categories", () => {
     let catToDelete;
     let catWithProduct;
     let productInCategory;
-    let testCategoryIdForProduct; // ID da categoria que terá produto
+    let testCategoryIdForProduct;
 
     beforeEach(async () => {
       catToDelete = await Category.create({ name: "Para Deletar" });
       catWithProduct = await Category.create({ name: "Com Produto" });
-      testCategoryIdForProduct = catWithProduct._id; // Guarda o ID
-      // Cria produto associado a catWithProduct
+      testCategoryIdForProduct = catWithProduct._id;
       productInCategory = await Product.create({
         name: "Produto Associado",
         price: 10,
-        category: testCategoryIdForProduct, // Usa o ID correto
+        category: testCategoryIdForProduct,
         image: "assoc.jpg",
         stock: 1,
       });
@@ -336,7 +325,7 @@ describe("/api/categories", () => {
       const res = await request(app)
         .delete(`/api/categories/${catToDelete._id}`)
         .set("Authorization", `Bearer ${adminToken}`)
-        .expect(200); // Controller retorna 200 com mensagem
+        .expect(200);
 
       expect(res.body.message).toMatch(/Categoria removida com sucesso/i);
 
@@ -346,7 +335,7 @@ describe("/api/categories", () => {
 
     it("Admin NÃO deve conseguir deletar categoria COM produtos associados (400)", async () => {
       const res = await request(app)
-        .delete(`/api/categories/${catWithProduct._id}`) // Usa o ID da categoria com produto
+        .delete(`/api/categories/${catWithProduct._id}`)
         .set("Authorization", `Bearer ${adminToken}`)
         .expect("Content-Type", /json/)
         .expect(400);
@@ -355,10 +344,8 @@ describe("/api/categories", () => {
         /Não é possível deletar. Existem 1 produto\(s\) nesta categoria/i
       );
 
-      // Verifica se a categoria ainda existe
       const notDeleted = await Category.findById(catWithProduct._id);
       expect(notDeleted).not.toBeNull();
-      // Verifica se o produto ainda existe no DB
       const prodExists = await Product.findById(productInCategory._id);
       expect(prodExists).not.toBeNull();
     });
@@ -386,7 +373,6 @@ describe("/api/categories", () => {
         .set("Authorization", `Bearer ${adminToken}`)
         .expect("Content-Type", /json/)
         .expect(400);
-      // Validação da rota
       expect(res.body.errors).toBeInstanceOf(Array);
       expect(res.body.errors[0].msg).toMatch(/ID de categoria inválido/i);
     });
@@ -397,4 +383,4 @@ describe("/api/categories", () => {
         .expect(401);
     });
   });
-}); // Fim describe /api/categories
+});

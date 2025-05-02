@@ -181,7 +181,7 @@ export const deleteMyAddress = async (req, res, next) => {
   }
 };
 
-// --- (Opcional) Definir Endereço como Padrão ---
+// --- Definir Endereço como Padrão ---
 export const setDefaultAddress = async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {

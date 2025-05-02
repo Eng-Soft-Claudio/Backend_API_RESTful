@@ -57,7 +57,6 @@ const router = express.Router();
  */
 router.post(
   "/handler",
-  // Middleware raw body (se necessário para assinatura) ou parsing manual
   express.raw({ type: "application/json", limit: "5mb" }),
   handleWebhook
 );

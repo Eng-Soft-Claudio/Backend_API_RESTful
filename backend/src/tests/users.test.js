@@ -41,7 +41,7 @@ beforeAll(async () => {
   // Garantir JWT_SECRET
   if (!process.env.JWT_SECRET) {
     process.env.JWT_SECRET = "test-secret-for-user-please-replace";
-    console.warn(
+    logger.warn(
       "JWT_SECRET não definido, usando valor padrão para testes de user."
     );
   }
@@ -114,8 +114,8 @@ describe("/api/users", () => {
       expect(res.body.data.user.name).toBe(newUserUserData.name);
       expect(res.body.data.user.email).toBe(newUserUserData.email);
       expect(res.body.data.user.role).toBe("user");
-      expect(res.body.data.user.password).toBeUndefined(); 
-      expect(res.body.data.user.cpf).toBeUndefined(); 
+      expect(res.body.data.user.password).toBeUndefined();
+      expect(res.body.data.user.cpf).toBeUndefined();
       expect(res.body.data.user.birthDate).toBeUndefined();
 
       const dbUser = await User.findOne({
@@ -127,8 +127,8 @@ describe("/api/users", () => {
       expect(dbUser.birthDate).toEqual(new Date(newUserUserData.birthDate));
       expect(await bcrypt.compare("passwordValid8", dbUser.password)).toBe(
         true
-      ); 
-      expect(dbUser.passwordChangedAt).toBeUndefined(); 
+      );
+      expect(dbUser.passwordChangedAt).toBeUndefined();
     });
 
     it("Admin deve conseguir criar um novo usuário (role admin)", async () => {

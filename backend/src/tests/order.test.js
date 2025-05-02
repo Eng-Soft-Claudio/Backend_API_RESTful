@@ -193,8 +193,8 @@ describe("/api/orders", () => {
       await Cart.create({
         user: testUserId,
         items: [
-          { product: product1Id, quantity: 2 }, 
-          { product: product2Id, quantity: 1 }, 
+          { product: product1Id, quantity: 2 },
+          { product: product2Id, quantity: 1 },
         ],
       });
     });
@@ -605,7 +605,7 @@ describe("/api/orders", () => {
   // --- Testes POST /:id/pay ---
   describe("POST /:id/pay", () => {
     let testOrder;
-    const quantityInOrder = 1; 
+    const quantityInOrder = 1;
     let expectedStockAfterCreation;
 
     beforeEach(async () => {
@@ -954,9 +954,9 @@ describe("/api/orders", () => {
       );
       expect(_mockPaymentCreate).not.toHaveBeenCalled();
 
-      isConfiguredMock.mockRestore(); 
+      isConfiguredMock.mockRestore();
     });
-  }); 
+  });
 
   // --- Testes GET / (Admin) ---
   describe("GET / (Admin)", () => {
@@ -1015,12 +1015,12 @@ describe("/api/orders", () => {
       );
       expect(res.body.data.orders[0]._id.toString()).toBe(
         orderUser2._id.toString()
-      ); 
+      );
     });
 
     it("admin deve listar pedidos com paginação e ordenação customizadas", async () => {
       const res = await request(app)
-        .get("/api/orders?page=1&limit=2&sort=totalPrice") 
+        .get("/api/orders?page=1&limit=2&sort=totalPrice")
         .set("Authorization", `Bearer ${adminUserToken}`)
         .expect(200);
 

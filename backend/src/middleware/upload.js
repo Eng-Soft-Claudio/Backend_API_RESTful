@@ -11,7 +11,7 @@ try {
     fs.mkdirSync(uploadDest, { recursive: true });
   }
 } catch(err) {
-  console.error("[MULTER] Erro ao criar diretório temporário:", err);
+  logger.error("[MULTER] Erro ao criar diretório temporário:", err);
 }
 
 // Configuração do armazenamento com destino explícito

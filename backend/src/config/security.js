@@ -1,6 +1,5 @@
 //src/config/security.js
 import rateLimit from 'express-rate-limit';
-import cors from 'cors';
 
 // Configuração de Rate Limiting
 export const apiLimiter = rateLimit({

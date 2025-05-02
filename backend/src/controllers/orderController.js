@@ -39,10 +39,10 @@ async function returnStockForOrderItems(orderItems, sessionOptions = {}) {
     // Executa as atualizações em lote
     const result = await Product.bulkWrite(stockUpdates, sessionOptions);
   } catch (stockErr) {
-    console.error(
-      "[Stock Return] !!! ERRO CRÍTICO AO RETORNAR ESTOQUE !!!:",
-      stockErr
-    );
+    logger.error("Erro crítico ao retornar estoque", {
+      error: stockErr,
+      orderItems,
+    });
   }
 }
 
@@ -216,8 +216,6 @@ export const createOrder = async (req, res, next) => {
     if (session) {
       try {
         await session.abortTransaction();
-      } catch (abortErr) {
-        console.warn("Erro ao abortar transação:", abortErr);
       } finally {
         session.endSession();
       }
@@ -408,12 +406,6 @@ export const payOrder = async (req, res, next) => {
 
     if (!res.headersSent) {
       next(new AppError(message, statusCode));
-    } else {
-      console.warn(
-        "Tentativa de enviar erro após headers já enviados:",
-        message,
-        err
-      );
     }
   }
 };

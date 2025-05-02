@@ -7,20 +7,18 @@ import {
   getMyOrders,
   getOrderById,
   payOrder,
-  getAllOrders, // Controller para Admin listar todos
-  updateOrderToShipped, // Controller para Admin marcar como enviado
-  updateOrderToDelivered, // Controller para Admin marcar como entregue
+  getAllOrders,
+  updateOrderToShipped,
+  updateOrderToDelivered,
 } from "../controllers/orderController.js";
-import Address from "../models/Address.js"; // Usado na validação de createOrder
+import Address from "../models/Address.js";
 
 const router = express.Router();
 
-// Aplica autenticação a TODAS as rotas de pedido
 router.use(authenticate);
 
 // --- Validações Reutilizáveis ---
 
-// Validação para criar pedido
 const createOrderValidationRules = [
   body(
     "shippingAddressId",
@@ -28,26 +26,20 @@ const createOrderValidationRules = [
   )
     .isMongoId()
     .custom(async (value, { req }) => {
-      // Verifica se o endereço existe E pertence ao usuário logado
       const address = await Address.findOne({ _id: value, user: req.user.id });
       if (!address) {
         throw new Error("Endereço de entrega inválido ou não pertence a você.");
       }
-      // Não precisa anexar o endereço aqui, o controller buscará novamente dentro da transação
-      // req.shippingAddressData = address;
       return true;
     }),
   body("paymentMethod", "Método de pagamento é obrigatório").trim().notEmpty(),
 ];
 
-// Validação para parâmetro ID do pedido na URL
 const orderIdParamValidation = [
   param("id", "ID do pedido inválido na URL").isMongoId(),
 ];
 
-// Validação para pagar pedido (Mercado Pago V1)
 const payOrderValidationRules = [
-  // Obrigatórios
   body(
     "payment_method_id",
     "ID do método de pagamento é obrigatório (ex: visa, pix)"
@@ -59,14 +51,12 @@ const payOrderValidationRules = [
     .isEmail()
     .normalizeEmail(),
 
-  // Condicionais (geralmente para cartão)
   body("token", "Token de pagamento é obrigatório para este método")
-    // Exige token se não for PIX ou dinheiro em conta (adicione outros métodos se necessário)
     .if(
       body("payment_method_id")
         .not()
         .isIn(["pix", "account_money", "bolbradesco"])
-    ) // Exemplo: não exige para boleto
+    )
     .trim()
     .notEmpty(),
   body("installments", "Número de parcelas é obrigatório (mínimo 1)")
@@ -85,10 +75,7 @@ const payOrderValidationRules = [
         .isIn(["pix", "account_money", "bolbradesco"])
     )
     .optional()
-    .trim(), // Opcional, mas se enviado, não pode ser vazio
-
-  // Identificação do pagador (pode ser obrigatória dependendo do país/valor/método)
-  // Tornando opcional na validação geral, mas a API do MP pode exigir
+    .trim(),
   body(
     "payer.identification.type",
     "Tipo de identificação do pagador inválido (ex: CPF, CNPJ)"
@@ -100,7 +87,7 @@ const payOrderValidationRules = [
     "payer.identification.number",
     "Número de identificação do pagador inválido"
   )
-    .if(body("payer.identification.type").exists({ checkFalsy: true })) // Só valida número se tipo foi enviado
+    .if(body("payer.identification.type").exists({ checkFalsy: true })) 
     .trim()
     .notEmpty(),
 ];

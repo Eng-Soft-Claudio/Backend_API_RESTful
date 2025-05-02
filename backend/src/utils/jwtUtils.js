@@ -9,10 +9,8 @@ import jwt from 'jsonwebtoken';
  */
 
 export const signToken = (id, role) => {
-    // Usa as variáveis de ambiente para o segredo e a expiração,
-    // com um fallback razoável para expiração se não estiver definida.
     return jwt.sign({ id, role }, process.env.JWT_SECRET, {
-        expiresIn: process.env.JWT_EXPIRES_IN || '90d', // Ex: '90d', '1h', '7d'
+        expiresIn: process.env.JWT_EXPIRES_IN || '90d',
     });
 };
 

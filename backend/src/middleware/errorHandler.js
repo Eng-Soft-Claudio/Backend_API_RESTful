@@ -42,10 +42,7 @@ const handleJWTExpiredError = () =>
 
 // Envia erro detalhado em ambiente de desenvolvimento ou teste
 const sendErrorDev = (err, res) => {
-  if (process.env.NODE_ENV !== 'test') {
-    console.error('ERROR 💥', err);
-  }
-
+  
   const responseBody = {
     status: err.status || 'error',
     message: err.message,
@@ -60,7 +57,6 @@ const sendErrorDev = (err, res) => {
   try {
       res.status(err.statusCode || 500).json(responseBody);
   } catch (sendError) {
-      console.error("[sendErrorDev] ERRO AO ENVIAR RESPOSTA JSON:", sendError);
       res.status(500).send('Erro interno do servidor ao formatar a resposta de erro.');
   }
 };
@@ -73,7 +69,6 @@ const sendErrorProd = (err, res) => {
       message: err.message,
     });
   } else {
-    console.error("ERROR 💥 (Não Operacional):", err);
     res.status(500).json({
       status: "error",
       message: "Desculpe, algo deu muito errado no servidor!",
@@ -102,7 +97,6 @@ const globalErrorHandler = (err, req, res, next) => {
 
   // --- Garante que mesmo erros não tratados tenham uma mensagem ---
   if (!errorToProcess.message) {
-    console.warn("[globalErrorHandler] Erro sem mensagem, definindo mensagem padrão.");
     errorToProcess.message = "Ocorreu um erro inesperado.";
   }
 

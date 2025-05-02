@@ -1,5 +1,5 @@
       
-# 🛒 API Base para E-commerce
+# 🛒 API Base para E-commerce com Node.js, Express e MongoDB
 
 ---
 
@@ -7,240 +7,383 @@
 
 1.  [Descrição](#-descrição)
 2.  [Funcionalidades Principais](#-funcionalidades-principais)
-3.  [Estrutura do Projeto (Backend)](#-estrutura-do-projeto-backend)
+3.  [Estrutura do Projeto](#-estrutura-do-projeto)
 4.  [Tecnologias Utilizadas](#-tecnologias-utilizadas)
-5.  [Instalação e Configuração](#-instalação-e-configuração)
-6.  [Executando a Aplicação](#-executando-a-aplicação)
-7.  [Executando os Testes](#-executando-os-testes)
-8.  [Documentação da API (Swagger)](#-documentação-da-api-swagger)
-9.  [Como Contribuir](#-como-contribuir)
-10. [Licença](#-licença)
+5.  [Pré-requisitos](#-pré-requisitos)
+6.  [Instalação e Configuração](#-instalação-e-configuração)
+7.  [Executando a Aplicação](#-executando-a-aplicação)
+8.  [Executando os Testes](#-executando-os-testes)
+9.  [Documentação da API (Swagger)](#-documentação-da-api-swagger)
+10. [Variáveis de Ambiente](#-variáveis-de-ambiente)
+11. [Como Contribuir](#-como-contribuir)
+12. [Licença](#-licença)
 
 ---
 
 ## 📝 Descrição
 
 <p align="justify">
-Este projeto fornece uma API RESTful robusta e escalável desenvolvida com Node.js, Express e MongoDB, servindo como uma base sólida para a construção de plataformas de e-commerce. Ele inclui funcionalidades essenciais como gerenciamento de produtos, categorias dinâmicas e usuários com controle de acesso baseado em roles (usuário/admin), utilizando autenticação segura via JWT. Foco em boas práticas, validação de entrada, tratamento de erros padronizado, testes automatizados e documentação interativa com Swagger.
+Este projeto oferece uma API RESTful robusta e escalável, desenvolvida com Node.js, Express e MongoDB, projetada para servir como uma base sólida e eficiente para a construção de plataformas de e-commerce modernas. A API implementa funcionalidades essenciais, incluindo gerenciamento completo de usuários (com autenticação JWT e controle de acesso baseado em roles), categorias dinâmicas (com geração automática de slugs), produtos (com upload de imagens para Cloudinary), carrinho de compras, gerenciamento de endereços, sistema de pedidos com integração básica para pagamentos (Mercado Pago mockado nos testes) e avaliações de produtos.
+</p>
+<p align="justify">
+O desenvolvimento priorizou boas práticas como validação rigorosa de entrada de dados (express-validator), tratamento de erros centralizado e padronizado, testes automatizados abrangentes (Jest/Supertest/MongoDB Memory Server) cobrindo os principais fluxos e cenários de erro, e documentação interativa da API gerada automaticamente via Swagger/OpenAPI.
 </p>
 
 ---
 
 ## ✨ Funcionalidades Principais
 
-*   **Autenticação:** Registro e Login de usuários com JWT (Json Web Tokens). Invalidação de token ao alterar senha.
+*   **Autenticação e Autorização:**
+    *   Registro e Login seguro de usuários usando JWT.
+    *   Hashing de senhas com Bcrypt.
+    *   Invalidação de token JWT ao alterar a senha.
+    *   Controle de acesso baseado em Roles (`user`, `admin`) com middlewares dedicados (`authenticate`, `isAdmin`).
 *   **Gerenciamento de Usuários:**
-    *   CRUD completo para administradores gerenciarem usuários (criar, listar, ver, atualizar role/dados, deletar).
-    *   Rotas para o usuário logado gerenciar seu próprio perfil (ver, atualizar dados, atualizar senha, deletar conta).
-*   **Controle de Acesso:** Sistema de Roles ('user', 'admin') com middlewares de autorização (`isAdmin`, `checkRole`).
-*   **Gerenciamento de Categorias:** CRUD completo para categorias de produtos (Admin). Geração automática de Slug.
-*   **Gerenciamento de Produtos:** CRUD completo para produtos (Admin), com associação a categorias dinâmicas e upload de imagens para Cloudinary.
-*   **Listagem de Produtos:** Endpoint público com filtros (categoria, busca textual), ordenação e paginação completa.
-*   **Validação de Entrada:** Validação robusta de dados de requisição usando `express-validator`.
-*   **Tratamento de Erros:** Middleware centralizado para tratamento padronizado de erros operacionais e de programação.
-*   **Segurança:** Configurações de CORS, rate limiting e hashing seguro de senhas com `bcrypt`.
-*   **Upload de Imagens:** Integração com Multer e Cloudinary para armazenamento de imagens de produtos.
-*   **Webhooks:** Estrutura básica para recebimento de webhooks externos.
-*   **Testes Automatizados:** Configuração com Jest, Supertest e MongoDB-in-Memory para testes de integração.
-*   **Documentação Interativa:** Documentação completa da API com Swagger/OpenAPI acessível via `/api-docs`.
+    *   CRUD completo para usuários (Admin).
+    *   Gerenciamento de perfil pelo próprio usuário (ver, atualizar dados, atualizar senha, deletar conta).
+*   **Gerenciamento de Categorias:**
+    *   CRUD completo para categorias (Admin).
+    *   Geração automática de `slug` a partir do nome da categoria.
+*   **Gerenciamento de Produtos:**
+    *   CRUD completo para produtos (Admin).
+    *   Associação com categorias.
+    *   Upload de imagens para Cloudinary integrado (com deleção automática ao atualizar/excluir produto).
+    *   Cálculo e armazenamento de média de avaliações (`rating`) e número de avaliações (`numReviews`).
+*   **Listagem de Produtos:**
+    *   Endpoint público com filtros avançados (categoria por ID ou slug, busca textual no nome/descrição).
+    *   Ordenação por diversos campos (nome, preço, data, etc.).
+    *   Paginação completa.
+*   **Gerenciamento de Endereços:**
+    *   CRUD completo de endereços para o usuário logado.
+    *   Funcionalidade para definir um endereço como padrão (com atualização automática dos demais).
+*   **Gerenciamento de Carrinho:**
+    *   Adicionar/incrementar itens.
+    *   Atualizar quantidade de item específico.
+    *   Remover item específico.
+    *   Limpar o carrinho.
+    *   Cálculo de subtotal por item (virtual).
+*   **Gerenciamento de Pedidos:**
+    *   Criação de pedido a partir do carrinho (copiando dados, decrementando estoque, limpando carrinho).
+    *   Cálculo de preço total (itens + frete exemplo).
+    *   Listagem de pedidos do próprio usuário (`/my`).
+    *   Obtenção de pedido específico (usuário vê apenas os seus, admin vê todos).
+    *   Processamento de pagamento simulado via `/pay` (com mocks para Mercado Pago).
+    *   Listagem de todos os pedidos com paginação (Admin).
+    *   Atualização de status de pedido para 'shipped' e 'delivered' (Admin).
+*   **Gerenciamento de Avaliações:**
+    *   Criação de avaliação para um produto (usuário logado, apenas uma por produto).
+    *   Listagem pública de avaliações por produto (com paginação).
+    *   Deleção de avaliação (própria ou qualquer uma por admin).
+    *   Atualização automática da média e contagem de avaliações no produto associado.
+*   **Webhooks:**
+    *   Endpoint para recebimento de webhooks do Mercado Pago (`/handler`).
+    *   Validação de assinatura HMAC-SHA256.
+    *   Processamento de eventos de pagamento (`approved`, `rejected`, etc.) com atualização do status do pedido e retorno de estoque.
+*   **Configuração:**
+    *   Endpoint público para obter configurações seguras para o frontend (ex: Chave Pública do Mercado Pago).
+*   **Qualidade e Boas Práticas:**
+    *   Validação de entrada com `express-validator`.
+    *   Tratamento de erros centralizado com `AppError` e `errorHandler`.
+    *   Middlewares reutilizáveis.
+    *   Estrutura de projeto organizada.
+    *   Testes automatizados robustos (>80% de cobertura de linha nos módulos testados).
+    *   Documentação da API com Swagger.
+    *   Configurações de segurança (CORS, Rate Limiting).
 
 ---
 
-## 📂 Estrutura do Projeto (Backend)
+## 📂 Estrutura do Projeto
 
 ```bash
 backend/
-├── coverage/             # Relatórios de cobertura de testes (gerado)
-├── jest.config.js        # Configuração do Jest
+├── coverage/               # Relatórios de cobertura de testes (gerado)
+├── jest.config.js          # Configuração do Jest
 ├── jest-environment-mongodb-config.js # Config do Mongo para Jest
 ├── package.json
 ├── package-lock.json
-├── .env                  # Arquivo de variáveis de ambiente (NÃO versionado)
-├── .env.example          # Arquivo de exemplo para variáveis de ambiente
-├── src/
-│   ├── app.js            # Configuração principal do Express (sem listen)
-│   ├── server.js         # Ponto de entrada: conecta DB e inicia o servidor (listen)
-│   ├── config/
-│   │   ├── db.js         # Conexão com MongoDB (ignora em teste)
-│   │   └── security.js   # Configs de CORS, Rate Limit
-│   ├── controllers/
-│   │   ├── auth.js       # Lógica de Login, Registro
-│   │   ├── category.js   # Lógica CRUD Categorias
-│   │   ├── products.js   # Lógica CRUD Produtos
-│   │   ├── users.js      # Lógica CRUD Usuários (Admin e self)
-│   │   └── webhooks.js   # Lógica Webhooks
-│   ├── middleware/
-│   │   ├── auth.js       # Middlewares authenticate, isAdmin
-│   │   ├── errorHandler.js # Middleware de tratamento global de erros
-│   │   ├── roles.js      # Middleware checkRole (se usado)
-│   │   └── upload.js     # Middleware Multer para upload (DiskStorage ou Cloudinary)
-│   ├── models/
-│   │   ├── Category.js   # Schema/Model Mongoose para Categoria
-│   │   ├── Product.js    # Schema/Model Mongoose para Produto
-│   │   ├── User.js       # Schema/Model Mongoose para Usuário (com hooks/métodos)
-│   │   └── Webhook.js    # Schema/Model Mongoose para Webhook (se necessário)
-│   ├── routes/
-│   │   ├── auth.js       # Rotas /api/auth (com anotações Swagger)
-│   │   ├── category.js   # Rotas /api/categories (com anotações Swagger)
-│   │   ├── products.js   # Rotas /api/products (com anotações Swagger)
-│   │   ├── users.js      # Rotas /api/users (com anotações Swagger)
-│   │   └── webhooks.js   # Rotas /api/webhooks (com anotações Swagger)
-│   ├── tests/            # Testes automatizados
-│   │   ├── auth.test.js
-│   │   ├── products.test.js
-│   │   ├── users.test.js
-│   │   └── ...(outros arquivos .test.js)
-│   └── utils/
-│       ├── appError.js   # Classe de erro customizada
-│       └── cloudinary.js # Configuração e helpers Cloudinary
-└── README.md             # Este arquivo
-```
-
----
-
-
-## ⚙️ Tecnologias Utilizadas
+├── .env                    # Variáveis de ambiente (NÃO versionado)
+├── .env.example            # Exemplo de variáveis de ambiente necessárias
+├── .gitignore              # Arquivos ignorados pelo Git
+├── babel.config.cjs        # Configuração do Babel
+└── src/
+    ├── app.js              # Configuração principal do Express
+    ├── server.js           # Ponto de entrada: Conecta DB e inicia servidor HTTP
+    ├── config/
+    │   ├── db.js           # Lógica de conexão com MongoDB
+    │   ├── mercadopago.js  # Configuração do SDK e cliente Mercado Pago
+    │   └── security.js     # Configurações de CORS, Rate Limit, etc.
+    ├── controllers/        # Lógica de negócio (request handling)
+    │   ├── addressController.js
+    │   ├── authController.js     
+    │   ├── cartController.js
+    │   ├── categoryController.js  
+    │   ├── configController.js
+    │   ├── orderController.js
+    │   ├── productsController.js 
+    │   ├── reviewController.js
+    │   ├── usersController.js     
+    │   └── webhooksController.js 
+    ├── middleware/           # Funções intermediárias
+    │   ├── auth.js           # Middlewares authenticate, isAdmin
+    │   ├── errorHandler.js   # Tratamento global de erros
+    │   ├── roles.js          # Middleware checkRole
+    │   └── upload.js         # Configuração do Multer para upload
+    ├── models/               # Definições de Schema e Model Mongoose
+    │   ├── Address.js
+    │   ├── Cart.js
+    │   ├── Category.js
+    │   ├── Order.js
+    │   ├── Product.js
+    │   ├── Review.js
+    │   └── User.js
+    ├── routes/               # Definição dos endpoints da API
+    │   ├── addressRoutes.js
+    │   ├── authRoutes.js        
+    │   ├── cartRoutes.js
+    │   ├── categoryRoutes.js    
+    │   ├── configRoutes.js
+    │   ├── orderRoutes.js
+    │   ├── productsRoutes.js    
+    │   ├── reviewRoutes.js
+    │   ├── usersRoutes.js       
+    │   └── webhooksRoutes.js    
+    ├── tests/                # Testes automatizados
+    │   ├── address.test.js
+    │   ├── auth.test.js
+    │   ├── cart.test.js
+    │   ├── category.test.js
+    │   ├── config.test.js
+    │   ├── order.test.js
+    │   ├── products.test.js
+    │   ├── review.test.js
+    │   ├── users.test.js
+    │   ├── webhooks.test.js
+    │   └── test-uploads/     # Diretório para arquivos dummy de teste (upload)
+    └── utils/                # Funções utilitárias e helpers
+        ├── appError.js       # Classe de erro customizada
+        ├── cloudinary.js     # Helpers para interagir com Cloudinary
+        ├── filterObject.js   # Helper para filtrar campos de objetos
+        ├── jwtUtils.js       # Helpers para JWT (signToken)
+        └── __mocks__/        # Mocks para testes (ex: cloudinary.js)
 
     
-    Backend: Node.js, Express.js  
-    Banco de Dados: MongoDB com Mongoose (ODM)  
-    Autenticação: JSON Web Token (JWT), Bcrypt  
-    Uploads: Multer, Cloudinary  
-    Validação: Express-validator  
-    Documentação: Swagger UI Express, Swagger-JSDoc  
-    Testes: Jest, Supertest, MongoDB Memory Server  
-    Variáveis de Ambiente: Dotenv  
-    Segurança: CORS, Express Rate Limit  
-    Linguagem: JavaScript (ES Modules)  
-    
-    
 
----
+IGNORE_WHEN_COPYING_START
+Use code with caution. Markdown
+IGNORE_WHEN_COPYING_END
 
+⚙️ Tecnologias Utilizadas
 
-## 🚀 Instalação e Configuração
+    Backend: Node.js, Express.js
 
-Clone o repositório:
+    Banco de Dados: MongoDB com Mongoose (ODM)
+
+    Autenticação: JSON Web Token (jsonwebtoken), Bcrypt (bcrypt)
+
+    Upload de Imagens: Multer, Cloudinary
+
+    Validação: express-validator
+
+    Pagamento (Simulado): Mercado Pago SDK (mercadopago) - Mockado nos testes
+
+    Documentação: Swagger UI Express (swagger-ui-express), Swagger JSDoc (swagger-jsdoc)
+
+    Testes: Jest, Supertest, MongoDB Memory Server (mongodb-memory-server)
+
+    Utilitários: Dotenv (dotenv), CORS (cors), Rate Limiter (express-rate-limit), Validador de CPF (cpf-cnpj-validator), Criptografia HMAC (crypto)
+
+    Linguagem: JavaScript (CommonJS - conforme configuração do Jest/Babel)
+
+📋 Pré-requisitos
+
+    Node.js (Versão LTS recomendada)
+
+    NPM ou Yarn
+
+    MongoDB (Instalado localmente ou uma instância na nuvem como MongoDB Atlas)
+
+    Uma conta Cloudinary (para armazenamento de imagens de produtos)
+
+    Uma conta de desenvolvedor Mercado Pago (para obter credenciais reais se for usar em produção)
+
+🚀 Instalação e Configuração
+
+    Clone o repositório:
+
+          
+    git clone https://github.com/Eng-Soft-Claudio/E-commerce.git
+    cd E-commerce/backend
 
         
-    git clone https://github.com/Eng-Soft-Claudio/E-commerce.git
-    cd E-commerce
-    
 
-Navegue até a pasta do backend:
+    IGNORE_WHEN_COPYING_START
 
-    cd backend
+Use code with caution. Bash
+IGNORE_WHEN_COPYING_END
 
 Instale as dependências:
-  
-    npm install
-
-Configure as Variáveis de Ambiente:
-    
-Crie um arquivo chamado .env dentro da pasta backend/.
-
-Copie o conteúdo do arquivo .env.example (se existir) ou adicione as seguintes variáveis, substituindo pelos seus valores:
-
-    # Ambiente (development, production, test)
-    NODE_ENV=development
-
-    # Configuração do Servidor
-    PORT=5000
-
-    # Banco de Dados MongoDB
-    MONGODB_URI=mongodb://localhost:27017/ecommerce_dev # Ou sua string de conexão Atlas/outro
-
-    # Autenticação JWT
-    JWT_SECRET=este-eh-um-segredo-muito-forte-mas-troque-depois
-    JWT_EXPIRES_IN=1d # Ex: 1d, 12h, 90d
-
-    # Cloudinary (obtenha no seu painel Cloudinary)
-    CLOUDINARY_CLOUD_NAME=seu_cloud_name
-    CLOUDINARY_API_KEY=seu_api_key
-    CLOUDINARY_API_SECRET=seu_api_secret
-
-    # CORS (Origens permitidas - separar por vírgula se mais de uma)
-    ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:5500
-
- Recomendação: Crie um arquivo .env.example com as chaves (sem os valores secretos) e adicione-o ao Git para que outros saibam quais variáveis são necessárias. Adicione .env ao seu .gitignore.
-
----
-
-## ▶️ Executando a Aplicação
-
-Após a instalação e configuração:  
-Para desenvolvimento (com Nodemon, se instalado):
-    
-    # Dentro da pasta backend/
-    npm run dev
-    
-(O Nodemon reiniciará o servidor automaticamente ao detectar alterações nos arquivos)
-
-
-Para produção ou execução simples:
-
-    # Dentro da pasta backend/
-    npm start
-    
-O servidor estará rodando em http://localhost:5000 (ou a porta definida no seu .env).
-
----
-
-## ✅ Executando os Testes
-
-Para rodar os testes de integração configurados com Jest:
-
-    
-    # Dentro da pasta backend/
-    npm test
-    
-Isso executará todos os arquivos .test.js dentro da pasta src/tests/ usando um banco de dados MongoDB em memória.
-
----
-
-## 📖 Documentação da API (Swagger)
-
-Com o servidor rodando (via npm start ou npm run dev), acesse a documentação interativa da API no seu navegador:
-
-    http://localhost:5000/api-docs
-
-A documentação permite visualizar todos os endpoints, seus parâmetros, schemas de requisição/resposta e até mesmo testar as rotas diretamente pela interface.
-
----
-
-## 🤝 Como Contribuir
 
       
-Abra uma issue: Antes de começar, crie uma issue para discutir a ideia ou problema.​
+npm install
+# ou
+yarn install
 
-Faça um fork: Crie um fork do repositório e clone-o para sua máquina.​
+    
 
-Crie uma branch: Trabalhe em uma branch separada para suas alterações.​
+IGNORE_WHEN_COPYING_START
 
-Implemente as mudanças: Realize as modificações necessárias no código.​
+    Use code with caution. Bash
+    IGNORE_WHEN_COPYING_END
 
-Faça commit: Adicione e faça commit das suas alterações com mensagens claras.​
+    Configure as Variáveis de Ambiente:
 
-Envie um pull request: Submeta um pull request com uma descrição detalhada da alteração.​
+        Renomeie (ou copie) o arquivo .env.example para .env.
 
-Se precisar de ajuda adicional ou tiver dúvidas, estou à disposição para ajudar!
+        Abra o arquivo .env e preencha TODAS as variáveis com seus valores correspondentes (veja a seção Variáveis de Ambiente abaixo para detalhes).
 
----
+▶️ Executando a Aplicação
 
+    Modo de Desenvolvimento (com recarga automática):
 
-## 📄 Licença
+          
+    npm run dev
 
-**MIT License**
+        
+
+    IGNORE_WHEN_COPYING_START
+
+Use code with caution. Bash
+IGNORE_WHEN_COPYING_END
+
+(Requer nodemon instalado globalmente ou como dependência de desenvolvimento).
+
+Modo de Produção (ou execução simples):
+
+      
+npm start
+
+    
+
+IGNORE_WHEN_COPYING_START
+
+    Use code with caution. Bash
+    IGNORE_WHEN_COPYING_END
+
+O servidor iniciará (por padrão) em http://localhost:5000 (ou na porta definida em PORT no seu .env).
+✅ Executando os Testes
+
+Para rodar a suíte completa de testes de integração configurada com Jest:
+
+      
+npm test
+
+    
+
+IGNORE_WHEN_COPYING_START
+Use code with caution. Bash
+IGNORE_WHEN_COPYING_END
+
+Isso executará todos os arquivos .test.js dentro de src/tests/. Os testes utilizam um banco de dados MongoDB em memória, garantindo que não interfiram com seu banco de dados de desenvolvimento ou produção. Os testes também mockam serviços externos como Cloudinary e Mercado Pago.
+
+Para ver o relatório de cobertura de código (após rodar os testes):
+
+      
+# Se configurado no package.json (ex: "test:coverage": "jest --coverage")
+npm run test:coverage
+# Abra o arquivo coverage/lcov-report/index.html no navegador
+
+    
+
+IGNORE_WHEN_COPYING_START
+Use code with caution. Bash
+IGNORE_WHEN_COPYING_END
+📖 Documentação da API (Swagger)
+
+Com o servidor em execução, a documentação interativa da API gerada pelo Swagger está disponível em:
+
+http://localhost:5000/api-docs
+
+(Substitua 5000 pela porta correta se você a alterou no .env).
+
+A interface Swagger permite visualizar todos os endpoints, modelos de dados, parâmetros esperados, respostas possíveis e testar as rotas diretamente.
+🔑 Variáveis de Ambiente (.env)
+
+Crie um arquivo .env na raiz da pasta backend/ com as seguintes variáveis:
+
+      
+# Ambiente de Execução ('development', 'production', 'test')
+NODE_ENV=development
+
+# Configurações do Servidor
+PORT=5000
+
+# Banco de Dados MongoDB
+# Exemplo Local: MONGODB_URI=mongodb://localhost:27017/ecommerce_dev
+# Exemplo Atlas: MONGODB_URI=mongodb+srv://<username>:<password>@<cluster-url>/<database_name>?retryWrites=true&w=majority
+MONGODB_URI=sua_string_de_conexao_mongodb
+
+# Autenticação JWT
+JWT_SECRET=segredo_super_secreto_e_longo_para_producao # Troque por um segredo forte e aleatório
+JWT_EXPIRES_IN=1d # Tempo de expiração do token (ex: 1d, 12h, 90d)
+
+# Cloudinary (obtenha no seu painel Cloudinary)
+CLOUDINARY_CLOUD_NAME=seu_cloud_name
+CLOUDINARY_API_KEY=seu_api_key
+CLOUDINARY_API_SECRET=seu_api_secret
+
+# Mercado Pago (obtenha no painel de desenvolvedor do Mercado Pago)
+# Use credenciais de TESTE para desenvolvimento e produção inicial
+MP_ACCESS_TOKEN=TEST-seu_access_token_de_teste
+MP_PUBLIC_KEY=TEST-sua_public_key_de_teste
+# Crie um webhook no painel do MP apontando para sua URL + /api/webhooks/handler
+# e coloque o segredo gerado aqui (essencial para produção)
+MP_WEBHOOK_SECRET=seu_segredo_do_webhook_mp
+
+# CORS (Origens permitidas no frontend - separar por vírgula)
+# Exemplo: ALLOWED_ORIGINS=http://localhost:3000,https://seu-frontend.com
+ALLOWED_ORIGINS=http://localhost:3000
+
+# Rate Limiting (Opcional - valores padrão no código)
+# RATE_LIMIT_WINDOW_MS=900000 # 15 minutos
+# RATE_LIMIT_MAX_REQUESTS=100 # 100 requisições por janela por IP
+
+    
+
+IGNORE_WHEN_COPYING_START
+Use code with caution. Dotenv
+IGNORE_WHEN_COPYING_END
+
+IMPORTANTE: Adicione o arquivo .env ao seu .gitignore para evitar expor suas credenciais secretas no controle de versão!
+🤝 Como Contribuir
+
+    Abra uma Issue: Discuta a mudança ou bug que você quer abordar.
+
+    Faça um Fork: Crie uma cópia do repositório na sua conta.
+
+    Clone seu Fork: git clone url_do_seu_fork
+
+    Crie uma Branch: git checkout -b minha-feature ou git checkout -b correcao-bug
+
+    Implemente e Teste: Faça suas alterações e adicione/atualize os testes correspondentes (npm test).
+
+    Faça Commit: git add . e git commit -m "feat: Descrição da feature". Siga convenções de commit (ex: Conventional Commits).
+
+    Push para o Fork: git push origin minha-feature
+
+    Abra um Pull Request: Vá para o repositório original e abra um Pull Request da sua branch para a branch principal (main ou master). Descreva suas alterações detalhadamente.
+
+📄 Licença
+
+MIT License
 <p align="justify">
 Copyright (c) 2024 Cláudio de Lima Tosta
 </p>
 <p align="justify">
-Por meio deste, é concedida permissão, gratuita e sem restrições, a qualquer pessoa que obtenha uma cópia deste software e dos arquivos de documentação associados (o "Software"), para lidar no Software sem restrições, incluindo, sem limitação, os direitos de usar, copiar, modificar, fundir, publicar, distribuir, sublicenciar e/ou vender cópias do Software, e para permitir que as pessoas a quem o Software é fornecido o façam, sujeitas às seguintes condições:
+A permissão é concedida, gratuitamente, a qualquer pessoa que obtenha uma cópia deste software e arquivos de documentação associados (o "Software"), para negociar o Software sem restrições, incluindo, sem limitação, os direitos de uso, cópia, modificação, fusão, publicação, distribuição, sublicenciamento e/ou venda de cópias do Software, e para permitir que as pessoas a quem o Software é fornecido o façam, sujeito às seguintes condições:
 </p>
 <p align="justify">
-A nota de copyright acima e esta permissão deverão ser incluídas em todas as cópias ou partes substanciais do Software.
+O aviso de direitos autorais acima e este aviso de permissão devem ser incluídos em todas as cópias ou partes substanciais do Software.
 </p>
 <p align="justify">
-O SOFTWARE É FORNECIDO "COMO ESTÁ", SEM GARANTIA DE QUALQUER TIPO, EXPRESSA OU IMPLÍCITA, INCLUINDO, MAS NÃO SE LIMITANDO ÀS GARANTIAS DE COMERCIABILIDADE, ADEQUAÇÃO A UM FIM ESPECÍFICO E NÃO INFRAÇÃO. EM NENHUM CASO OS AUTORES OU TITULARES DOS DIREITOS AUTORAIS SERÃO RESPONSÁVEIS POR QUALQUER RECLAMAÇÃO, DANO OU OUTRA RESPONSABILIDADE, SEJA EM UMA AÇÃO DE CONTRATO, TORTO OU OUTRO, DECORRENTE DE, FORA DE OU EM CONEXÃO COM O SOFTWARE OU O USO OU OUTRAS NEGOCIAÇÕES NO SOFTWARE.
+O SOFTWARE É FORNECIDO "COMO ESTÁ", SEM GARANTIA DE QUALQUER TIPO, EXPRESSA OU IMPLÍCITA, INCLUINDO, MAS NÃO SE LIMITANDO ÀS GARANTIAS DE COMERCIABILIDADE, ADEQUAÇÃO A UM DETERMINADO FIM E NÃO VIOLAÇÃO. EM NENHUMA CIRCUNSTÂNCIA OS AUTORES OU DETENTORES DOS DIREITOS AUTORAIS SERÃO RESPONSÁVEIS POR QUALQUER REIVINDICAÇÃO, DANOS OU OUTRA RESPONSABILIDADE, SEJA EM UMA AÇÃO DE CONTRATO, DELITO OU OUTRA FORMA, DECORRENTE DE, FORA DE OU EM CONEXÃO COM O SOFTWARE OU O USO OU OUTRAS NEGOCIAÇÕES NO SOFTWARE.
 </p>
-

@@ -1,14 +1,14 @@
 //src/routes/cartRoutes.js
-import express from 'express';
-import { body, param } from 'express-validator';
-import { authenticate } from '../middleware/auth.js';
+import express from "express";
+import { body, param } from "express-validator";
+import { authenticate } from "../middleware/auth.js";
 import {
-    getMyCart,
-    addItemToCart,
-    updateCartItemQuantity,
-    removeCartItem,
-    clearCart
-} from '../controllers/cartController.js';
+  getMyCart,
+  addItemToCart,
+  updateCartItemQuantity,
+  removeCartItem,
+  clearCart,
+} from "../controllers/cartController.js";
 
 const router = express.Router();
 
@@ -19,24 +19,19 @@ router.use(authenticate);
 
 // Validação para adicionar item
 const addItemValidationRules = [
-    body('productId', 'ID do produto inválido').isMongoId(),
-    body('quantity', 'Quantidade inválida')
-        .isInt({ gt: 0 }) 
-        .toInt()
+  body("productId", "ID do produto inválido").isMongoId(),
+  body("quantity", "Quantidade inválida").isInt({ gt: 0 }).toInt(),
 ];
 
 // Validação para atualizar quantidade (ID do produto vem da URL)
 const updateQuantityValidationRules = [
-    body('quantity', 'Quantidade inválida')
-        .isInt({ gt: 0 }) 
-        .toInt()
+  body("quantity", "Quantidade inválida").isInt({ gt: 0 }).toInt(),
 ];
 
 // Validação para parâmetro ID do produto na URL
 const productIdParamValidation = [
-    param('productId', 'ID do produto inválido na URL').isMongoId()
+  param("productId", "ID do produto inválido na URL").isMongoId(),
 ];
-
 
 // --- Definição das Rotas ---
 
@@ -90,7 +85,7 @@ const productIdParamValidation = [
  *         description: Erro interno.
  *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
  */
-router.get('/', getMyCart);
+router.get("/", getMyCart);
 
 /**
  * @swagger
@@ -148,8 +143,7 @@ router.get('/', getMyCart);
  *         description: Erro interno.
  *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
  */
-router.post('/items', addItemValidationRules, addItemToCart);
-
+router.post("/items", addItemValidationRules, addItemToCart);
 
 /**
  * @swagger
@@ -210,12 +204,11 @@ router.post('/items', addItemValidationRules, addItemToCart);
  *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
  */
 router.put(
-    '/items/:productId',
-    productIdParamValidation, 
-    updateQuantityValidationRules,
-    updateCartItemQuantity
+  "/items/:productId",
+  productIdParamValidation,
+  updateQuantityValidationRules,
+  updateCartItemQuantity
 );
-
 
 /**
  * @swagger
@@ -260,12 +253,7 @@ router.put(
  *         description: Erro interno.
  *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
  */
-router.delete(
-    '/items/:productId',
-    productIdParamValidation, 
-    removeCartItem
-);
-
+router.delete("/items/:productId", productIdParamValidation, removeCartItem);
 
 /**
  * @swagger
@@ -296,7 +284,6 @@ router.delete(
  *         description: Erro interno.
  *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
  */
-router.delete('/', clearCart);
-
+router.delete("/", clearCart);
 
 export default router;

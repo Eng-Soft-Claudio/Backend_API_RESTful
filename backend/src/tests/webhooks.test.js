@@ -66,7 +66,7 @@ beforeAll(async () => {
   // Garantir JWT_SECRET 
   if (!process.env.JWT_SECRET) {
     process.env.JWT_SECRET = "webhook-secret-placeholder";
-    console.warn("JWT_SECRET não definido para testes de webhook.");
+    logger.warn("JWT_SECRET não definido para testes de webhook.");
   }
 
   // Conecta ao banco ANTES de iniciar o servidor

@@ -1,15 +1,15 @@
 //src/routes/addressRoutes.js
-import express from 'express';
-import { body, param } from 'express-validator';
-import { authenticate } from '../middleware/auth.js';
+import express from "express";
+import { body, param } from "express-validator";
+import { authenticate } from "../middleware/auth.js";
 import {
-    addAddress,
-    getMyAddresses,
-    getMyAddressById,
-    updateMyAddress,
-    deleteMyAddress,
-    setDefaultAddress
-} from '../controllers/addressController.js';
+  addAddress,
+  getMyAddresses,
+  getMyAddressById,
+  updateMyAddress,
+  deleteMyAddress,
+  setDefaultAddress,
+} from "../controllers/addressController.js";
 
 const router = express.Router();
 
@@ -18,36 +18,108 @@ router.use(authenticate);
 
 // --- Regras de Validação para CRIAÇÃO (POST) ---
 const createAddressValidationRules = [
-    body('label', 'Rótulo inválido (máx 50 caracteres)').optional().trim().isLength({ max: 50 }),
-    body('street', 'Nome da rua/logradouro é obrigatório (máx 200 caracteres)').trim().notEmpty().isLength({ max: 200 }),
-    body('number', 'Número é obrigatório (máx 20 caracteres)').trim().notEmpty().isLength({ max: 20 }),
-    body('complement', 'Complemento inválido (máx 100 caracteres)').optional().trim().isLength({ max: 100 }),
-    body('neighborhood', 'Bairro é obrigatório (máx 100 caracteres)').trim().notEmpty().isLength({ max: 100 }),
-    body('city', 'Cidade é obrigatória (máx 100 caracteres)').trim().notEmpty().isLength({ max: 100 }),
-    body('state', 'Estado (UF) é obrigatório (2 caracteres)').trim().notEmpty().isLength({ min: 2, max: 2 }).toUpperCase(),
-    body('postalCode', 'CEP inválido (formato 12345-678 ou 12345678)').trim().notEmpty().matches(/^\d{5}-?\d{3}$/),
-    body('country', 'País é obrigatório (máx 50 caracteres)').optional({ checkFalsy: true }).trim().notEmpty().isLength({ max: 50 }),
-    body('phone', 'Telefone inválido (máx 20 caracteres)').optional().trim().isLength({ max: 20 }),
+  body("label", "Rótulo inválido (máx 50 caracteres)")
+    .optional()
+    .trim()
+    .isLength({ max: 50 }),
+  body("street", "Nome da rua/logradouro é obrigatório (máx 200 caracteres)")
+    .trim()
+    .notEmpty()
+    .isLength({ max: 200 }),
+  body("number", "Número é obrigatório (máx 20 caracteres)")
+    .trim()
+    .notEmpty()
+    .isLength({ max: 20 }),
+  body("complement", "Complemento inválido (máx 100 caracteres)")
+    .optional()
+    .trim()
+    .isLength({ max: 100 }),
+  body("neighborhood", "Bairro é obrigatório (máx 100 caracteres)")
+    .trim()
+    .notEmpty()
+    .isLength({ max: 100 }),
+  body("city", "Cidade é obrigatória (máx 100 caracteres)")
+    .trim()
+    .notEmpty()
+    .isLength({ max: 100 }),
+  body("state", "Estado (UF) é obrigatório (2 caracteres)")
+    .trim()
+    .notEmpty()
+    .isLength({ min: 2, max: 2 })
+    .toUpperCase(),
+  body("postalCode", "CEP inválido (formato 12345-678 ou 12345678)")
+    .trim()
+    .notEmpty()
+    .matches(/^\d{5}-?\d{3}$/),
+  body("country", "País é obrigatório (máx 50 caracteres)")
+    .optional({ checkFalsy: true })
+    .trim()
+    .notEmpty()
+    .isLength({ max: 50 }),
+  body("phone", "Telefone inválido (máx 20 caracteres)")
+    .optional()
+    .trim()
+    .isLength({ max: 20 }),
 ];
 
 // --- Regras de Validação para ATUALIZAÇÃO (PUT) ---
 const updateAddressValidationRules = [
-    body('label', 'Rótulo inválido (máx 50 caracteres)').optional().trim().isLength({ max: 50 }),
-    body('street', 'Nome da rua/logradouro inválido (máx 200 caracteres)').optional().trim().notEmpty().isLength({ max: 200 }),
-    body('number', 'Número inválido (máx 20 caracteres)').optional().trim().notEmpty().isLength({ max: 20 }),
-    body('complement', 'Complemento inválido (máx 100 caracteres)').optional({ nullable: true }).trim().isLength({ max: 100 }),
-    body('neighborhood', 'Bairro inválido (máx 100 caracteres)').optional().trim().notEmpty().isLength({ max: 100 }),
-    body('city', 'Cidade inválida (máx 100 caracteres)').optional().trim().notEmpty().isLength({ max: 100 }),
-    body('state', 'Estado (UF) inválido (2 caracteres)').optional().trim().notEmpty().isLength({ min: 2, max: 2 }).toUpperCase(),
-    body('postalCode', 'CEP inválido (formato 12345-678 ou 12345678)').optional().trim().notEmpty().matches(/^\d{5}-?\d{3}$/),
-    body('country', 'País inválido (máx 50 caracteres)').optional().trim().notEmpty().isLength({ max: 50 }),
-    body('phone', 'Telefone inválido (máx 20 caracteres)').optional({ nullable: true }).trim().isLength({ max: 20 }),
-    body('isDefault', 'Valor inválido para isDefault (deve ser true ou false)').optional().isBoolean().toBoolean()
+  body("label", "Rótulo inválido (máx 50 caracteres)")
+    .optional()
+    .trim()
+    .isLength({ max: 50 }),
+  body("street", "Nome da rua/logradouro inválido (máx 200 caracteres)")
+    .optional()
+    .trim()
+    .notEmpty()
+    .isLength({ max: 200 }),
+  body("number", "Número inválido (máx 20 caracteres)")
+    .optional()
+    .trim()
+    .notEmpty()
+    .isLength({ max: 20 }),
+  body("complement", "Complemento inválido (máx 100 caracteres)")
+    .optional({ nullable: true })
+    .trim()
+    .isLength({ max: 100 }),
+  body("neighborhood", "Bairro inválido (máx 100 caracteres)")
+    .optional()
+    .trim()
+    .notEmpty()
+    .isLength({ max: 100 }),
+  body("city", "Cidade inválida (máx 100 caracteres)")
+    .optional()
+    .trim()
+    .notEmpty()
+    .isLength({ max: 100 }),
+  body("state", "Estado (UF) inválido (2 caracteres)")
+    .optional()
+    .trim()
+    .notEmpty()
+    .isLength({ min: 2, max: 2 })
+    .toUpperCase(),
+  body("postalCode", "CEP inválido (formato 12345-678 ou 12345678)")
+    .optional()
+    .trim()
+    .notEmpty()
+    .matches(/^\d{5}-?\d{3}$/),
+  body("country", "País inválido (máx 50 caracteres)")
+    .optional()
+    .trim()
+    .notEmpty()
+    .isLength({ max: 50 }),
+  body("phone", "Telefone inválido (máx 20 caracteres)")
+    .optional({ nullable: true })
+    .trim()
+    .isLength({ max: 20 }),
+  body("isDefault", "Valor inválido para isDefault (deve ser true ou false)")
+    .optional()
+    .isBoolean()
+    .toBoolean(),
 ];
-const mongoIdValidation = (paramName = 'id') => [
-    param(paramName, `ID inválido para ${paramName}`).isMongoId()
+const mongoIdValidation = (paramName = "id") => [
+  param(paramName, `ID inválido para ${paramName}`).isMongoId(),
 ];
-
 
 /**
  * @swagger
@@ -103,12 +175,7 @@ const mongoIdValidation = (paramName = 'id') => [
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post(
-    '/',
-    createAddressValidationRules,
-    addAddress
-);
-
+router.post("/", createAddressValidationRules, addAddress);
 
 /**
  * @swagger
@@ -142,10 +209,7 @@ router.post(
  *         description: Erro interno.
  *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
  */
-router.get(
-    '/',
-    getMyAddresses
-);
+router.get("/", getMyAddresses);
 
 /**
  * @swagger
@@ -190,11 +254,7 @@ router.get(
  *         description: Erro interno.
  *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
  */
-router.get(
-    '/:id',
-    mongoIdValidation('id'),
-    getMyAddressById
-);
+router.get("/:id", mongoIdValidation("id"), getMyAddressById);
 
 /**
  * @swagger
@@ -246,12 +306,11 @@ router.get(
  *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
  */
 router.put(
-    '/:id',
-    mongoIdValidation('id'),
-    updateAddressValidationRules,
-    updateMyAddress
+  "/:id",
+  mongoIdValidation("id"),
+  updateAddressValidationRules,
+  updateMyAddress
 );
-
 
 /**
  * @swagger
@@ -285,11 +344,7 @@ router.put(
  *         description: Erro interno.
  *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
  */
-router.delete(
-    '/:id',
-    mongoIdValidation('id'),
-    deleteMyAddress
-);
+router.delete("/:id", mongoIdValidation("id"), deleteMyAddress);
 
 /**
  * @swagger
@@ -333,10 +388,6 @@ router.delete(
  *         description: Erro interno.
  *         content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
  */
-router.patch(
-    '/:id/default',
-    mongoIdValidation('id'),
-    setDefaultAddress
-);
+router.patch("/:id/default", mongoIdValidation("id"), setDefaultAddress);
 
 export default router;

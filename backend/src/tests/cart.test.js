@@ -36,7 +36,7 @@ beforeAll(async () => {
   // Criar Token de teste
   if (!process.env.JWT_SECRET) {
     process.env.JWT_SECRET = "test-secret-cart";
-    console.warn(
+    logger.warn(
       "JWT_SECRET não definido, usando valor padrão para testes de cart."
     );
   }
