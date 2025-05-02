@@ -165,14 +165,11 @@ backend/
         ├── filterObject.js   # Helper para filtrar campos de objetos
         ├── jwtUtils.js       # Helpers para JWT (signToken)
         └── __mocks__/        # Mocks para testes (ex: cloudinary.js)
+```
 
-    
+---
 
-IGNORE_WHEN_COPYING_START
-Use code with caution. Markdown
-IGNORE_WHEN_COPYING_END
-
-⚙️ Tecnologias Utilizadas
+## ⚙️ Tecnologias Utilizadas
 
     Backend: Node.js, Express.js
 
@@ -194,7 +191,9 @@ IGNORE_WHEN_COPYING_END
 
     Linguagem: JavaScript (CommonJS - conforme configuração do Jest/Babel)
 
-📋 Pré-requisitos
+---
+
+## 📋 Pré-requisitos
 
     Node.js (Versão LTS recomendada)
 
@@ -206,155 +205,124 @@ IGNORE_WHEN_COPYING_END
 
     Uma conta de desenvolvedor Mercado Pago (para obter credenciais reais se for usar em produção)
 
-🚀 Instalação e Configuração
+---
+
+## 🚀 Instalação e Configuração
 
     Clone o repositório:
-
           
     git clone https://github.com/Eng-Soft-Claudio/Bckend_API_RESTful.git
     cd E-commerce/backend
 
-        
 
-    IGNORE_WHEN_COPYING_START
-
-Use code with caution. Bash
-IGNORE_WHEN_COPYING_END
-
-Instale as dependências:
-
+    Instale as dependências:
       
-npm install
-# ou
-yarn install
+    npm install
+    ou
+    yarn install
 
-    
-
-IGNORE_WHEN_COPYING_START
-
-    Use code with caution. Bash
-    IGNORE_WHEN_COPYING_END
 
     Configure as Variáveis de Ambiente:
 
         Renomeie (ou copie) o arquivo .env.example para .env.
-
         Abra o arquivo .env e preencha TODAS as variáveis com seus valores correspondentes (veja a seção Variáveis de Ambiente abaixo para detalhes).
-
-▶️ Executando a Aplicação
+ 
+ ---
+ 
+## ▶️ Executando a Aplicação
 
     Modo de Desenvolvimento (com recarga automática):
-
           
     npm run dev
-
-        
-
-    IGNORE_WHEN_COPYING_START
-
-Use code with caution. Bash
-IGNORE_WHEN_COPYING_END
-
-(Requer nodemon instalado globalmente ou como dependência de desenvolvimento).
-
-Modo de Produção (ou execução simples):
-
-      
-npm start
+    (Requer nodemon instalado globalmente ou como dependência de desenvolvimento).
 
     
+    Modo de Produção (ou execução simples):
+    
+    npm run start
 
-IGNORE_WHEN_COPYING_START
+    O servidor iniciará (por padrão) em http://localhost:5000 (ou na porta definida em PORT no seu .env).
 
-    Use code with caution. Bash
-    IGNORE_WHEN_COPYING_END
+---
 
-O servidor iniciará (por padrão) em http://localhost:5000 (ou na porta definida em PORT no seu .env).
-✅ Executando os Testes
+## ✅ Executando os Testes
 
-Para rodar a suíte completa de testes de integração configurada com Jest:
+    Para rodar a suíte completa de testes de integração configurada com Jest:
+    
+    npm run test
+
+    Isso executará todos os arquivos .test.js dentro de src/tests/. Os testes utilizam um banco de dados MongoDB em memória, garantindo que não interfiram com seu banco de dados de desenvolvimento ou produção. Os testes também mockam serviços externos como Cloudinary e Mercado Pago.
+
+    Para ver o relatório de cobertura de código (após rodar os testes):
 
       
-npm test
+    # Se configurado no package.json (ex: "test:coverage": "jest --coverage")
+    npm run test:coverage
+    # Abra o arquivo coverage/lcov-report/index.html no navegador
 
-    
+---
 
-IGNORE_WHEN_COPYING_START
-Use code with caution. Bash
-IGNORE_WHEN_COPYING_END
+## 📖 Documentação da API (Swagger)
 
-Isso executará todos os arquivos .test.js dentro de src/tests/. Os testes utilizam um banco de dados MongoDB em memória, garantindo que não interfiram com seu banco de dados de desenvolvimento ou produção. Os testes também mockam serviços externos como Cloudinary e Mercado Pago.
+    Com o servidor em execução, a documentação interativa da API gerada pelo Swagger está disponível em:
 
-Para ver o relatório de cobertura de código (após rodar os testes):
+    http://localhost:5000/api-docs
 
+    (Substitua 5000 pela porta correta se você a alterou no .env).
+
+    A interface Swagger permite visualizar todos os endpoints, modelos de dados, parâmetros esperados, respostas possíveis e testar as rotas diretamente.
+
+---
+
+## 🔑 Variáveis de Ambiente (.env)
+
+    Crie um arquivo .env na raiz da pasta backend/ com as seguintes variáveis:
+```bash
       
-# Se configurado no package.json (ex: "test:coverage": "jest --coverage")
-npm run test:coverage
-# Abra o arquivo coverage/lcov-report/index.html no navegador
+    # Ambiente de Execução ('development', 'production', 'test')
+    NODE_ENV=development
 
-    
+    # Configurações do Servidor
+    PORT=5000
 
-IGNORE_WHEN_COPYING_START
-Use code with caution. Bash
-IGNORE_WHEN_COPYING_END
-📖 Documentação da API (Swagger)
+    # Banco de Dados MongoDB
+    Exemplo Local: MONGODB_URI=mongodb://localhost:27017/ecommerce_dev
+    Exemplo Atlas: MONGODB_URI=mongodb+srv://<username>:<password>@<cluster-url>/<database_name>?retryWrites=true&w=majority
+    MONGODB_URI=sua_string_de_conexao_mongodb
 
-Com o servidor em execução, a documentação interativa da API gerada pelo Swagger está disponível em:
+    # Autenticação JWT
+    JWT_SECRET=segredo_super_secreto_e_longo_para_producao # Troque por um segredo forte e aleatório
+    JWT_EXPIRES_IN=1d # Tempo de expiração do token (ex: 1d, 12h, 90d)
 
-http://localhost:5000/api-docs
+    # Cloudinary (obtenha no seu painel Cloudinary)
+    CLOUDINARY_CLOUD_NAME=seu_cloud_name
+    CLOUDINARY_API_KEY=seu_api_key
+    CLOUDINARY_API_SECRET=seu_api_secret
 
-(Substitua 5000 pela porta correta se você a alterou no .env).
+    # Mercado Pago (obtenha no painel de desenvolvedor do Mercado Pago)
+    # Use credenciais de TESTE para desenvolvimento e produção inicial
+    MP_ACCESS_TOKEN=TEST-seu_access_token_de_teste
+    MP_PUBLIC_KEY=TEST-sua_public_key_de_teste
+    # Crie um webhook no painel do MP apontando para sua URL + /api/webhooks/handler
+    # e coloque o segredo gerado aqui (essencial para produção)
+    MP_WEBHOOK_SECRET=seu_segredo_do_webhook_mp
 
-A interface Swagger permite visualizar todos os endpoints, modelos de dados, parâmetros esperados, respostas possíveis e testar as rotas diretamente.
-🔑 Variáveis de Ambiente (.env)
+    # CORS (Origens permitidas no frontend - separar por vírgula)
+    # Exemplo: ALLOWED_ORIGINS=http://localhost:3000,https://seu-frontend.com
+    ALLOWED_ORIGINS=http://localhost:3000
 
-Crie um arquivo .env na raiz da pasta backend/ com as seguintes variáveis:
+    # Rate Limiting (Opcional - valores padrão no código)
+    # RATE_LIMIT_WINDOW_MS=900000 # 15 minutos
+    # RATE_LIMIT_MAX_REQUESTS=100 # 100 requisições por janela por IP
+```
 
-      
-# Ambiente de Execução ('development', 'production', 'test')
-NODE_ENV=development
-
-# Configurações do Servidor
-PORT=5000
-
-# Banco de Dados MongoDB
-# Exemplo Local: MONGODB_URI=mongodb://localhost:27017/ecommerce_dev
-# Exemplo Atlas: MONGODB_URI=mongodb+srv://<username>:<password>@<cluster-url>/<database_name>?retryWrites=true&w=majority
-MONGODB_URI=sua_string_de_conexao_mongodb
-
-# Autenticação JWT
-JWT_SECRET=segredo_super_secreto_e_longo_para_producao # Troque por um segredo forte e aleatório
-JWT_EXPIRES_IN=1d # Tempo de expiração do token (ex: 1d, 12h, 90d)
-
-# Cloudinary (obtenha no seu painel Cloudinary)
-CLOUDINARY_CLOUD_NAME=seu_cloud_name
-CLOUDINARY_API_KEY=seu_api_key
-CLOUDINARY_API_SECRET=seu_api_secret
-
-# Mercado Pago (obtenha no painel de desenvolvedor do Mercado Pago)
-# Use credenciais de TESTE para desenvolvimento e produção inicial
-MP_ACCESS_TOKEN=TEST-seu_access_token_de_teste
-MP_PUBLIC_KEY=TEST-sua_public_key_de_teste
-# Crie um webhook no painel do MP apontando para sua URL + /api/webhooks/handler
-# e coloque o segredo gerado aqui (essencial para produção)
-MP_WEBHOOK_SECRET=seu_segredo_do_webhook_mp
-
-# CORS (Origens permitidas no frontend - separar por vírgula)
-# Exemplo: ALLOWED_ORIGINS=http://localhost:3000,https://seu-frontend.com
-ALLOWED_ORIGINS=http://localhost:3000
-
-# Rate Limiting (Opcional - valores padrão no código)
-# RATE_LIMIT_WINDOW_MS=900000 # 15 minutos
-# RATE_LIMIT_MAX_REQUESTS=100 # 100 requisições por janela por IP
-
-    
-
-IGNORE_WHEN_COPYING_START
-Use code with caution. Dotenv
-IGNORE_WHEN_COPYING_END
+---
 
 IMPORTANTE: Adicione o arquivo .env ao seu .gitignore para evitar expor suas credenciais secretas no controle de versão!
-🤝 Como Contribuir
+
+---
+
+## 🤝 Como Contribuir
 
     Abra uma Issue: Discuta a mudança ou bug que você quer abordar.
 
@@ -372,7 +340,9 @@ IMPORTANTE: Adicione o arquivo .env ao seu .gitignore para evitar expor suas cre
 
     Abra um Pull Request: Vá para o repositório original e abra um Pull Request da sua branch para a branch principal (main ou master). Descreva suas alterações detalhadamente.
 
-📄 Licença
+---
+
+## 📄 Licença
 
 MIT License
 <p align="justify">
