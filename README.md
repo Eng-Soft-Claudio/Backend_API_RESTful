@@ -211,7 +211,7 @@ IGNORE_WHEN_COPYING_END
     Clone o repositório:
 
           
-    git clone https://github.com/Eng-Soft-Claudio/E-commerce.git
+    git clone https://github.com/Eng-Soft-Claudio/Bckend_API_RESTful.git
     cd E-commerce/backend
 
         
